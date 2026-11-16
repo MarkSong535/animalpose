@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 from torch import nn
 
 from animalpose.behavior.model import BehaviorExport, BehaviorTCN
@@ -100,12 +101,33 @@ def verify_onnx(module: nn.Module, path, input_names, input_sets, atol: float = 
         with torch.no_grad():
             ref = [r.numpy() for r in _as_tuple(module(*inputs))]
         got = sess.run(None, {n: i.numpy() for n, i in zip(input_names, inputs)})
+        if isinstance(module, DetectorExport):
+            # Rounding differences near a score tie can change the order of otherwise
+            # identical detections. Match boxes and scores together, keeping the tolerance.
+            worst = max(worst, _detector_error(ref, got))
+            continue
         for r, g in zip(ref, got):
             if r.dtype.kind in "iu":  # indices: compare exactly
                 worst = max(worst, float(np.abs(r.astype(np.int64) - g.astype(np.int64)).max()))
             else:
                 worst = max(worst, float(np.abs(r - g).max()))
     return {"ok": worst <= atol, "max_abs_err": worst}
+
+
+def _detector_error(ref, got) -> float:
+    if any(r.shape != g.shape for r, g in zip(ref, got)):
+        return float("inf")
+    ref_boxes, ref_scores = ref
+    got_boxes, got_scores = got
+    worst = 0.0
+    for rb, rs, gb, gs in zip(ref_boxes, ref_scores, got_boxes, got_scores):
+        box_error = np.abs(rb[:, None] - gb).max(axis=-1)
+        errors = np.maximum(box_error, np.abs(rs[:, None] - gs))
+        if not np.isfinite(errors).all():
+            return float("inf")
+        rows, columns = linear_sum_assignment(errors)
+        worst = max(worst, float(errors[rows, columns].max(initial=0)))
+    return worst
 
 
 def export_all(out_dir: str | Path, detector: CenterDetector | None = None, pose: PoseNet | None = None,

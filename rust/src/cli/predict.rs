@@ -44,7 +44,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::cli::catalog::Catalog;
 use crate::cli::pairs::resolve_pair_identity;
-use crate::cli::smooth::smooth_sequence;
+use crate::cli::smooth::{smooth_sequence_with_checkpoint, Smoothed};
 use crate::cli::train::repo_path;
 
 /// `pipeline.py:PipelineConfig` with the same defaults and the same config keys.
@@ -394,14 +394,73 @@ pub fn run_with(
     overrides: &[String],
     overlay: bool,
 ) -> Result<()> {
-    let cfg = Config::load(config, overrides)?;
-    let pipeline = Pipeline::from_config(&cfg)?;
+    run_with_progress(
+        config,
+        frames,
+        out,
+        max_frames,
+        fps,
+        overrides,
+        overlay,
+        |_| Ok(()),
+    )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Progress {
+    Preparing,
+    Tracking { done: usize, total: usize },
+    Refining,
+    WritingTracks,
+    Overlay { done: usize, total: usize },
+    FinishingOverlay,
+}
+
+/// The same prediction pass, reporting progress at safe points where the caller can pause or stop.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_with_progress(
+    config: &str,
+    frames: &str,
+    out: &str,
+    max_frames: Option<usize>,
+    fps: Option<f64>,
+    overrides: &[String],
+    overlay: bool,
+    mut progress: impl FnMut(Progress) -> Result<()>,
+) -> Result<()> {
+    progress(Progress::Preparing)?;
+    let pipeline = load_pipeline(config, overrides)?;
+    run_loaded_with_progress(&pipeline, frames, out, max_frames, fps, overlay, progress)
+}
+
+/// Loads the networks `config` names, once for any number of recordings.
+pub(crate) fn load_pipeline(config: &str, overrides: &[String]) -> Result<Pipeline> {
+    Pipeline::from_config(&Config::load(config, overrides)?)
+}
+
+/// [`run_with_progress`] with networks that are already loaded.
+///
+/// Every call is an independent recording: the tracker, its identities and the temporal model's
+/// windows start fresh at frame 0, so nothing from a previously processed video carries over. The
+/// [`Pipeline`] only holds network weights (and, with the `mps` feature, compiled GPU graphs keyed
+/// by input shape), which do not depend on the frames seen before.
+pub(crate) fn run_loaded_with_progress(
+    pipeline: &Pipeline,
+    frames: &str,
+    out: &str,
+    max_frames: Option<usize>,
+    fps: Option<f64>,
+    overlay: bool,
+    mut progress: impl FnMut(Progress) -> Result<()>,
+) -> Result<()> {
+    progress(Progress::Preparing)?;
     let out_dir = PathBuf::from(out);
     std::fs::create_dir_all(&out_dir)
         .with_context(|| format!("cannot create {}", out_dir.display()))?;
 
     let source = Source::open(frames)?;
     let times = source.timestamps(max_frames)?;
+    progress(Progress::Preparing)?;
     let timing = timing_report(&times);
     std::fs::write(
         out_dir.join("timing.json"),
@@ -421,18 +480,28 @@ pub fn run_with(
         source.n_frames().min(max_frames.unwrap_or(usize::MAX))
     );
     let background = if pipeline.cfg.needs_background() {
-        Some(source.sampled_background(64, max_frames)?)
+        Some(
+            source.sampled_background_with_checkpoint(64, max_frames, || {
+                progress(Progress::Preparing)
+            })?,
+        )
     } else {
         None
     };
-    let result = pipeline.run_stream(
-        source.iter(max_frames)?,
-        background.as_ref(),
-        fps,
-        Some(&times),
-    )?;
+    let total = times.len();
+    progress(Progress::Tracking { done: 0, total })?;
+    let mut result =
+        pipeline.track_with_progress(source.iter(max_frames)?, background.as_ref(), |done| {
+            progress(Progress::Tracking { done, total })
+        })?;
+    progress(Progress::Refining)?;
+    pipeline.refine_at(&mut result, fps, Some(&times), || {
+        progress(Progress::Refining)
+    })?;
 
+    progress(Progress::WritingTracks)?;
     result.to_npz(&out_dir.join("tracks.npz"))?;
+    progress(Progress::WritingTracks)?;
     result.to_csv(&out_dir.join("tracks.csv"))?;
     if result.behavior_info.is_some() {
         result.to_behavior_csv(&out_dir.join("behavior.csv"), pipeline.cfg.behavior_top_k)?;
@@ -453,10 +522,14 @@ pub fn run_with(
     );
     if overlay {
         if crate::data::video::ffmpeg_available() {
+            let total = result.n_frames;
+            progress(Progress::Overlay { done: 0, total })?;
             let mut writer = VideoWriter::new(out_dir.join("overlay.mp4"), fps);
             for (t, frame) in source.iter(max_frames)?.enumerate() {
                 writer.write(&crate::cli::overlay::draw_frame(&frame?, &result, t))?;
+                progress(Progress::Overlay { done: t + 1, total })?;
             }
+            progress(Progress::FinishingOverlay)?;
             let written = writer.finish()?;
             println!("overlay.mp4: {written} frames");
         } else {
@@ -570,7 +643,7 @@ impl Pipeline {
         times: Option<&[f64]>,
     ) -> Result<VideoOut> {
         let mut result = self.track(frames, background)?;
-        self.refine_at(&mut result, fps, times)?;
+        self.refine_at(&mut result, fps, times, || Ok(()))?;
         Ok(result)
     }
 
@@ -579,6 +652,15 @@ impl Pipeline {
         &self,
         frames: impl IntoIterator<Item = Result<Bgr>>,
         background: Option<&GrayF>,
+    ) -> Result<VideoOut> {
+        self.track_with_progress(frames, background, |_| Ok(()))
+    }
+
+    pub(crate) fn track_with_progress(
+        &self,
+        frames: impl IntoIterator<Item = Result<Bgr>>,
+        background: Option<&GrayF>,
+        mut progress: impl FnMut(usize) -> Result<()>,
     ) -> Result<VideoOut> {
         let mut tracker = MultiAnimalTracker::new(self.tracker_cfg.clone());
         let mut per_track: BTreeMap<i64, BTreeMap<usize, Detection>> = BTreeMap::new();
@@ -627,11 +709,13 @@ impl Pipeline {
                     .or_default()
                     .insert(t, detections[index].clone());
             }
+            progress(n_frames)?;
         }
 
         let mut tracks = BTreeMap::new();
         let pairs = BILATERAL_PAIRS.len();
         for (tid, observed) in per_track {
+            progress(n_frames)?;
             let first = *observed.keys().next().expect("a track has a frame");
             let last = *observed.keys().next_back().expect("a track has a frame");
             let frames: Vec<usize> = (first..=last).collect();
@@ -836,7 +920,13 @@ impl Pipeline {
     /// `PosePipeline.refine`: temporal smoothing, then the classifier and the catalogue.
     /// `PosePipeline.refine(result, fps=fps, times=times)`: unknown or missing times continue at
     /// the constant rate `fps` after the last known one.
-    fn refine_at(&self, result: &mut VideoOut, fps: f64, times: Option<&[f64]>) -> Result<()> {
+    fn refine_at(
+        &self,
+        result: &mut VideoOut,
+        fps: f64,
+        times: Option<&[f64]>,
+        mut checkpoint: impl FnMut() -> Result<()>,
+    ) -> Result<()> {
         let n = result
             .tracks
             .values()
@@ -864,6 +954,7 @@ impl Pipeline {
         let mut kin: BTreeMap<i64, Kinematics> = BTreeMap::new();
         let ids: Vec<i64> = result.tracks.keys().copied().collect();
         for tid in ids {
+            checkpoint()?;
             let frames = result.tracks[&tid].span();
             if frames < MIN_TRACK_FRAMES {
                 continue;
@@ -881,7 +972,7 @@ impl Pipeline {
                 })
                 .collect();
             if let Some(temporal) = &self.temporal {
-                let smoothed = smooth_sequence(
+                let mut smoothed = smooth_sequence_with_checkpoint(
                     temporal,
                     &track.keypoints,
                     &track.conf,
@@ -889,7 +980,17 @@ impl Pipeline {
                     frames,
                     self.cfg.temporal_window,
                     self.cfg.temporal_hop,
+                    &mut checkpoint,
                 )?;
+                if matches!(temporal, Model::Temporal(m) if !m.bidirectional()) {
+                    keep_raw_before_first_observation(
+                        &mut smoothed,
+                        &track.keypoints,
+                        &track.conf,
+                        &observed,
+                        frames,
+                    );
+                }
                 let track = result.tracks.get_mut(&tid).expect("the track exists");
                 track.smoothed = Some(smoothed.coords);
                 track.smoothed_conf = Some(smoothed.confidence);
@@ -924,6 +1025,7 @@ impl Pipeline {
         let mut modelled = Vec::new();
         let ids: Vec<i64> = result.tracks.keys().copied().collect();
         for tid in ids {
+            checkpoint()?;
             if !kin.contains_key(&tid) {
                 continue;
             }
@@ -1064,6 +1166,32 @@ pub struct Estimate {
 
 /// `refine`'s `min_len`: a shorter track gets no temporal pass and no behavior.
 const MIN_TRACK_FRAMES: usize = 5;
+
+/// The start of a track for a causal temporal model (`bidirectional: false`): until a keypoint has
+/// been observed once, the model has no history to predict it from and its one-sided prior is zero,
+/// which would place the point at the window's centre. Those frames keep the tracker's own
+/// keypoints and confidences instead (still flagged as imputed). A bidirectional model fills them
+/// from the first observation that follows, as `linear_prior` does, and needs no fallback.
+///
+/// `// differs from Python:` `smooth_sequence` returns the network output for those frames.
+fn keep_raw_before_first_observation(
+    smoothed: &mut Smoothed,
+    keypoints: &[f64],
+    conf: &[f64],
+    observed: &[f64],
+    frames: usize,
+) {
+    for k in 0..NUM_KEYPOINTS {
+        let first = (0..frames)
+            .find(|t| observed[t * NUM_KEYPOINTS + k] > 0.5)
+            .unwrap_or(frames);
+        for t in 0..first {
+            let i = t * NUM_KEYPOINTS + k;
+            smoothed.coords[i * 2..i * 2 + 2].copy_from_slice(&keypoints[i * 2..i * 2 + 2]);
+            smoothed.confidence[i] = conf[i];
+        }
+    }
+}
 
 /// The index of the first maximum of a row, `np.argmax`'s tie-break.
 fn argmax_first(row: &[f64]) -> usize {
@@ -1254,14 +1382,20 @@ pub(crate) fn default_pipeline_config() -> PathBuf {
         .unwrap_or_else(|| repo_path(DEFAULT_PIPELINE_CONFIG))
 }
 
-fn checkpoint_path(cfg: &Config, path: &str) -> PathBuf {
+pub(crate) fn checkpoint_path(cfg: &Config, path: &str) -> PathBuf {
     let file = repo_path(path);
     if Path::new(path).is_absolute() || Path::new(path).is_file() {
         return file;
     }
+    let config_dir = cfg.source().and_then(|source| Path::new(source).parent());
+    if let Some(local) = config_dir
+        .map(|dir| dir.join(path))
+        .filter(|path| path.is_file())
+    {
+        return local;
+    }
     // Release model bundles preserve the repository layout (configs/ and weights/ as siblings).
-    cfg.source()
-        .and_then(|source| Path::new(source).parent())
+    config_dir
         .filter(|dir| dir.ends_with("configs"))
         .and_then(Path::parent)
         .map(|root| root.join(path))
@@ -1984,6 +2118,36 @@ mod tests {
             assert!((sum - 1.0).abs() < 1e-9, "row {r} sums to {sum}");
         }
         assert!(probs[2] > probs[1] && probs[1] > probs[0]);
+    }
+
+    #[test]
+    fn causal_smoothing_keeps_raw_points_until_the_first_observation() {
+        let (frames, k) = (4, NUM_KEYPOINTS);
+        let keypoints: Vec<f64> = (0..frames * k * 2).map(|i| i as f64).collect();
+        let conf = vec![0.1; frames * k];
+        // Keypoint 0 is first seen at frame 2, keypoint 1 at frame 0, the rest never.
+        let mut observed = vec![0.0; frames * k];
+        observed[2 * k] = 1.0;
+        observed[3 * k] = 1.0;
+        for t in 0..frames {
+            observed[t * k + 1] = 1.0;
+        }
+        let mut smoothed = Smoothed {
+            coords: vec![-1.0; frames * k * 2],
+            confidence: vec![0.9; frames * k],
+            imputed: vec![0.0; frames * k],
+        };
+        keep_raw_before_first_observation(&mut smoothed, &keypoints, &conf, &observed, frames);
+        let at = |t: usize, kp: usize| (t * k + kp) * 2;
+        for t in 0..2 {
+            assert_eq!(smoothed.coords[at(t, 0)], keypoints[at(t, 0)]);
+            assert_eq!(smoothed.confidence[t * k], 0.1);
+        }
+        for t in 2..frames {
+            assert_eq!(smoothed.coords[at(t, 0)], -1.0, "the model output is kept");
+        }
+        assert!((0..frames).all(|t| smoothed.coords[at(t, 1)] == -1.0));
+        assert!((0..frames).all(|t| smoothed.coords[at(t, 2)] == keypoints[at(t, 2)]));
     }
 
     #[test]

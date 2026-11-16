@@ -370,7 +370,7 @@ def test_label_keeps_only_the_frames_it_can_defend(lab, tmp_path):
 
     kept = api.label(raw, out=tmp_path / "filtered", per_source=4, include=["cage2"], **teacher)
     assert kept["sources"] == 1 and kept["frames"] == 4
-    assert json.loads((tmp_path / "filtered/split.json").read_text())["train"] == ["caicai/cage2.mp4"]
+    assert json.loads((tmp_path / "filtered/split.json").read_text())["train"] == [str(Path("caicai") / "cage2.mp4")]
 
     options = LabelOptions(out=str(tmp_path / "given"), detector=str(lab["ck"]["detector"]),
                            pose=str(lab["ck"]["pose"]), boxes="blob", kp_conf=0.0, flip_tol=1.0, min_kps=1,

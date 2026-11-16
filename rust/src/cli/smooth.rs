@@ -37,6 +37,29 @@ pub fn smooth_sequence(
     window: usize,
     hop: usize,
 ) -> Result<Smoothed> {
+    smooth_sequence_with_checkpoint(
+        model,
+        coords,
+        conf,
+        observed,
+        frames,
+        window,
+        hop,
+        || Ok(()),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn smooth_sequence_with_checkpoint(
+    model: &Model,
+    coords: &[f64],
+    conf: &[f64],
+    observed: &[f64],
+    frames: usize,
+    window: usize,
+    hop: usize,
+    mut checkpoint: impl FnMut() -> Result<()>,
+) -> Result<Smoothed> {
     anyhow::ensure!(frames > 0, "cannot smooth an empty track");
     let keypoints = observed.len() / frames;
     let window = window.clamp(1, frames);
@@ -70,6 +93,7 @@ pub fn smooth_sequence(
     // `// differs from Python:` `smooth_sequence` forwards one window at a time, which torch keeps
     // as `(1, window, K, 2)`; a lone window is repeated here and its duplicate output discarded.
     for pair in starts.chunks(2) {
+        checkpoint()?;
         let batch: Vec<usize> = if pair.len() == 2 {
             vec![pair[0], pair[1]]
         } else {

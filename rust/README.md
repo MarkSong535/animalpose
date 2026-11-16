@@ -44,15 +44,48 @@ Checkpoints load from `.pt` (read directly, no torch needed) or `.safetensors`.
 cargo run --release --features gui --bin animalpose-gui
 ```
 
-1. Tick one or more cameras, or type a video file path, then press **Start**. Each view shows live
-   skeletons and track IDs.
-2. Press **Record** / **Stop recording**. By default, each camera is saved under
-   `~/AnimalPose/recordings/rec-<time>/cam<i>.mp4`.
-3. Press **Analyze last recording**. This runs the full pipeline (temporal model and behavior
-   included) into `<recording>/analysis/`. With several cameras plus a `cameras.json` from
-   `animalpose data calibrate`, it runs in 3D.
+1. Select cameras and press **Start preview**. Choose the **Recording folder**, then start a
+   manual or timed recording. On macOS, grant camera access when prompted.
+2. Under **Protocol timers**, edit the **Accustomization** and **Experiment** durations in seconds.
+   Add stages for additional experiments. **Wait for Continue** records the interval after a stage
+   in a separate clip until you click **Continue to next stage**.
+3. Each stage or wait interval gets a named folder with one MP4 per camera. **Stop and save**
+   flushes the encoders. The session files list the protocol, the verified frame counts, and the
+   first and last capture times of each clip. The default target is `~/AnimalPose/recordings`.
 
-The cameras are not hardware-synchronized. On macOS the first **Start** asks for camera access.
+Recording takes priority over pose analysis. The app queues every frame it receives in order and
+uses a separate, sampled raw preview while recording. If encoding falls behind, capture waits for
+queue space. Frames lost upstream by the camera or driver cannot be recovered. Cameras are
+free-running without hardware synchronization.
+
+In **Video processing**, use **Add videos…** (several files at once), **Add folders…** (searched
+recursively; hidden folders and earlier analysis folders are skipped) or type a path, then press
+**Process**. One video writes `tracks.csv`, `tracks.npz`, and `overlay.mp4` into its own folder
+under `~/AnimalPose/processed`. Several videos go into one `batch-…` folder with a subfolder per
+video and a `batch.json` listing each input's output or error. A failed video is reported and the
+batch continues with the next. Each video is analyzed as a separate recording: tracking and the
+temporal model start fresh at its first frame, so nothing carries over from the previous video.
+**Analyze last recording** processes each recorded stage separately. Supply a calibration JSON for
+multi-camera 3D analysis of synchronized views.
+
+The progress bar shows which pass is running and counts frames during analysis and overlay
+writing. With several videos, a second bar shows which video is in progress. **Pause** and **Stop
+processing** take effect after the current operation. **Resume** continues the same job. Stopping
+discards unfinished analysis and keeps completed videos, stages and source recordings.
+
+Under **Models and configs**, choose **Import folder** to find YAML configs and `.pt` or
+`.safetensors` checkpoints in a folder and its subfolders. Folder imports link to library copies
+of models they can locate and skip missing paths. Several configs can use the same checkpoint,
+and importing identical model files reuses the stored copy.
+
+**Import config** imports the YAML settings, including inherited settings. Choose the detector
+and pose checkpoints in the app. Behavior classification is optional. The app produces
+coordinates and an overlay without a behavior model. Clear **Classify behavior if available** to
+skip classification even when a model is available.
+
+Configs are stored in `~/AnimalPose/configs`. Model selections, recording location, and the timer
+protocol are restored from `~/AnimalPose/settings.json`.
+On Linux, file pickers use the desktop's XDG portal.
 
 ## GPU (`--features mps`, macOS)
 

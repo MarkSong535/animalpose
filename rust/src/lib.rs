@@ -26,7 +26,11 @@ pub mod models;
 pub mod data;
 #[rustfmt::skip]
 pub mod eval;
+#[cfg(feature = "app")]
+pub mod app;
 pub mod cli;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 #[cfg(feature = "gui")]
 pub mod gui;
 pub mod multiview;

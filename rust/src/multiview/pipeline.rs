@@ -18,10 +18,10 @@ use super::npz::{write_npz, Member};
 use super::triangulation::nan_to_num;
 use crate::algos::background::median_background;
 use crate::algos::image::{GrayF, Image};
-use crate::cli::predict::{Pipeline, PipelineCfg, VideoOut};
+use crate::cli::predict::{Pipeline, PipelineCfg, Progress, VideoOut};
 use crate::cli::smooth::smooth_sequence;
 use crate::data::config::Config;
-use crate::data::images::{read_frames, u8_from_gray};
+use crate::data::images::{read_frames_with_checkpoint, u8_from_gray};
 use crate::data::sessions::{NpyArray, NpyData};
 use crate::models::Model;
 use crate::tensor::{Ctx, Graph};
@@ -102,6 +102,15 @@ impl MultiViewPipeline {
     /// As `PosePipeline.track` does when it is handed no background, a median background is taken
     /// from each view's own frames when the config needs one.
     pub fn run(&self, pipe: &Pipeline, views: &[Vec<GrayF>]) -> Result<MultiViewResult> {
+        self.run_with_progress(pipe, views, &mut |_| Ok(()))
+    }
+
+    fn run_with_progress(
+        &self,
+        pipe: &Pipeline,
+        views: &[Vec<GrayF>],
+        progress: &mut impl FnMut(Progress) -> Result<()>,
+    ) -> Result<MultiViewResult> {
         ensure!(
             views.len() == self.cameras.len(),
             "{} views but {} cameras",
@@ -109,16 +118,30 @@ impl MultiViewPipeline {
             self.cameras.len()
         );
         let mut per_view = Vec::with_capacity(views.len());
+        let total = views.iter().map(Vec::len).sum();
+        let mut completed = 0;
         for frames in views {
+            progress(Progress::Tracking {
+                done: completed,
+                total,
+            })?;
             let background = pipe.cfg.needs_background().then(|| {
                 let samples: Vec<Image> = frames.iter().map(u8_from_gray).collect();
                 median_background(&samples, pipe.cfg.background_frames)
             });
-            per_view.push(pipe.track(
+            per_view.push(pipe.track_with_progress(
                 frames.iter().map(|f| Ok(crate::data::images::to_bgr8(f))),
                 background.as_ref(),
+                |done| {
+                    progress(Progress::Tracking {
+                        done: completed + done,
+                        total,
+                    })
+                },
             )?);
+            completed += frames.len();
         }
+        progress(Progress::Refining)?;
         self.run_tracks(per_view)
     }
 
@@ -376,6 +399,21 @@ pub fn run_cli(
     max_frames: Option<usize>,
     overrides: &[String],
 ) -> Result<()> {
+    run_cli_with_progress(config, views, cameras, out, max_frames, overrides, |_| {
+        Ok(())
+    })
+}
+
+pub(crate) fn run_cli_with_progress(
+    config: &str,
+    views: &[String],
+    cameras: &str,
+    out: &str,
+    max_frames: Option<usize>,
+    overrides: &[String],
+    mut progress: impl FnMut(Progress) -> Result<()>,
+) -> Result<()> {
+    progress(Progress::Preparing)?;
     let cfg = Config::load(config, overrides)?;
     let out_dir = PathBuf::from(out);
     std::fs::create_dir_all(&out_dir)
@@ -390,11 +428,14 @@ pub fn run_cli(
     );
     let mut frames = Vec::with_capacity(views.len());
     for v in views {
-        let (f, _fps) = read_frames(v, max_frames, 1)?;
+        progress(Progress::Preparing)?;
+        let (f, _fps) =
+            read_frames_with_checkpoint(v, max_frames, 1, || progress(Progress::Preparing))?;
         frames.push(f);
     }
     let mv = MultiViewPipeline::new(cams, &pipe.cfg);
-    let res = mv.run(&pipe, &frames)?;
+    let res = mv.run_with_progress(&pipe, &frames, &mut progress)?;
+    progress(Progress::WritingTracks)?;
     res.write(&out_dir)?;
     println!(
         "{} animals fused across {} views -> {}",

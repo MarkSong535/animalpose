@@ -46,8 +46,10 @@ def linux_packages(binary, dest, arch):
         shutil.copy2(LICENSE, root / license_path)
 
         deb_deps = ["libc6 (>= 2.35)", "libgcc-s1"]
+        deb_recommends = ["ffmpeg", "curl"]
         rpm_deps = []
         if gui:
+            deb_recommends.append("xdg-desktop-portal")
             desktop = root / "usr/share/applications/animalpose-gui.desktop"
             desktop.parent.mkdir(parents=True)
             desktop.write_text(
@@ -84,12 +86,13 @@ def linux_packages(binary, dest, arch):
                     "libwayland-egl.so.1",
                 )
             ]
+            rpm_deps.append("Recommends: xdg-desktop-portal")
 
         (root / "DEBIAN").mkdir()
         (root / "DEBIAN/control").write_text(
             f"Package: {name}\nVersion: {VERSION}\nSection: science\nPriority: optional\n"
             f"Architecture: {deb_arch}\nMaintainer: AnimalPose contributors\n"
-            f"Depends: {', '.join(deb_deps)}\nRecommends: ffmpeg, curl\nDescription: {description}\n"
+            f"Depends: {', '.join(deb_deps)}\nRecommends: {', '.join(deb_recommends)}\nDescription: {description}\n"
         )
         deb = dest / f"{name}_{VERSION}_{deb_arch}.deb"
         run("dpkg-deb", "--root-owner-group", "--build", root, deb)

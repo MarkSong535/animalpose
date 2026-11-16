@@ -68,7 +68,17 @@ fn video_command(exe: impl AsRef<Path>) -> Command {
 
 /// `true` when the `ffmpeg` executable runs.
 pub fn ffmpeg_available() -> bool {
-    video_command(ffmpeg())
+    tool_available(ffmpeg())
+}
+
+/// `true` when the `ffprobe` executable runs.
+#[cfg(feature = "gui")]
+pub(crate) fn ffprobe_available() -> bool {
+    tool_available(ffprobe())
+}
+
+fn tool_available(path: PathBuf) -> bool {
+    video_command(path)
         .arg("-version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -114,15 +124,25 @@ pub struct VideoInfo {
 
 /// `ffprobe` on the first video stream of `path`.
 pub fn probe(path: &Path) -> Result<VideoInfo> {
+    probe_stream(path, true)
+}
+
+/// Reads the frame count from the MP4 header without rescanning a session's video data.
+#[cfg(feature = "gui")]
+pub(crate) fn mp4_frames(path: &Path) -> Result<usize> {
+    Ok(probe_stream(path, false)?.frames)
+}
+
+fn probe_stream(path: &Path, count_packets: bool) -> Result<VideoInfo> {
     ensure!(path.is_file(), "no video file at {}", path.display());
     let exe = ffprobe();
-    let out = video_command(&exe)
+    let mut command = video_command(&exe);
+    command.args(["-v", "error", "-select_streams", "v:0"]);
+    if count_packets {
+        command.arg("-count_packets");
+    }
+    let out = command
         .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-count_packets",
             "-show_entries",
             "stream=width,height,avg_frame_rate,r_frame_rate,nb_frames,nb_read_packets",
             "-of",
@@ -194,8 +214,9 @@ impl VideoReader {
         let exe = ffmpeg();
         let mut cmd = video_command(&exe);
         cmd.args(["-v", "error", "-nostdin", "-i"]).arg(path);
+        cmd.args(["-map", "0:v:0"]).args(passthrough_args(&exe));
         if let Some(filter) = filter {
-            cmd.args(["-vf", filter]).args(passthrough_args(&exe));
+            cmd.args(["-vf", filter]);
         }
         if let Some(n) = max_frames {
             cmd.args(["-frames:v", &n.to_string()]);
@@ -257,6 +278,14 @@ impl Drop for VideoReader {
 
 /// The frames at `indices` (any order; returned sorted, duplicates dropped), with their indices.
 pub fn frames_at(path: &Path, indices: &[usize]) -> Result<Vec<(usize, Bgr)>> {
+    frames_at_with_checkpoint(path, indices, || Ok(()))
+}
+
+pub(crate) fn frames_at_with_checkpoint(
+    path: &Path,
+    indices: &[usize],
+    mut checkpoint: impl FnMut() -> Result<()>,
+) -> Result<Vec<(usize, Bgr)>> {
     let mut wanted: Vec<usize> = indices.to_vec();
     wanted.sort_unstable();
     wanted.dedup();
@@ -274,6 +303,7 @@ pub fn frames_at(path: &Path, indices: &[usize]) -> Result<Vec<(usize, Bgr)>> {
     let mut out = Vec::with_capacity(wanted.len());
     for (index, frame) in wanted.iter().zip(reader) {
         out.push((*index, frame?));
+        checkpoint()?;
     }
     Ok(out)
 }
@@ -325,6 +355,7 @@ pub fn timestamps(path: &Path, max_frames: Option<usize>) -> Result<Vec<f64>> {
 pub struct VideoWriter {
     path: PathBuf,
     fps: f64,
+    realtime: bool,
     inner: Option<(Child, ChildStdin, u32, u32)>,
     written: usize,
 }
@@ -335,20 +366,31 @@ impl VideoWriter {
         Self {
             path: path.into(),
             fps: if fps.is_finite() && fps > 0.0 { fps } else { 30.0 },
+            realtime: false,
             inner: None,
             written: 0,
         }
     }
 
+    /// Uses fast software encoding for live capture and avoids rewriting finished clips.
+    #[cfg(feature = "gui")]
+    pub(crate) fn for_recording(path: &Path, fps: f64) -> Self {
+        let mut writer = Self::new(path, fps);
+        writer.realtime = true;
+        writer
+    }
+
     fn start(&mut self, width: u32, height: u32) -> Result<()> {
         let exe = ffmpeg();
         let codec = if encoder_available("libx264") {
-            vec!["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
+            let preset = if self.realtime { "ultrafast" } else { "veryfast" };
+            vec!["-c:v", "libx264", "-preset", preset, "-crf", "20"]
         } else {
             vec!["-c:v", "mpeg4", "-q:v", "3"]
         };
         // yuv420p needs even dimensions; pad by one pixel when a side is odd.
-        let mut child = video_command(&exe)
+        let mut cmd = video_command(&exe);
+        cmd
             .args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s"])
             .arg(format!("{width}x{height}"))
             .args(["-r", &format!("{}", self.fps), "-i", "-"])
@@ -358,9 +400,11 @@ impl VideoWriter {
                 "pad=ceil(iw/2)*2:ceil(ih/2)*2",
                 "-pix_fmt",
                 "yuv420p",
-                "-movflags",
-                "+faststart",
-            ])
+            ]);
+        if !self.realtime {
+            cmd.args(["-movflags", "+faststart"]);
+        }
+        let mut child = cmd
             .arg(&self.path)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
@@ -414,6 +458,16 @@ impl VideoWriter {
             }
         }
         Ok(self.written)
+    }
+}
+
+impl Drop for VideoWriter {
+    fn drop(&mut self) {
+        if let Some((mut child, stdin, _, _)) = self.inner.take() {
+            let _ = child.kill();
+            drop(stdin);
+            let _ = child.wait();
+        }
     }
 }
 

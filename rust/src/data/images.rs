@@ -52,6 +52,15 @@ pub fn read_frames(
     max_frames: Option<usize>,
     stride: usize,
 ) -> Result<(Vec<GrayF>, Option<f64>)> {
+    read_frames_with_checkpoint(path, max_frames, stride, || Ok(()))
+}
+
+pub(crate) fn read_frames_with_checkpoint(
+    path: impl AsRef<Path>,
+    max_frames: Option<usize>,
+    stride: usize,
+    mut checkpoint: impl FnMut() -> Result<()>,
+) -> Result<(Vec<GrayF>, Option<f64>)> {
     ensure!(stride > 0, "frame stride must be positive, got {stride}");
     let source = path.as_ref();
     if source.is_file() && crate::data::video::is_video(source) {
@@ -65,6 +74,7 @@ pub fn read_frames(
             if t % stride == 0 {
                 frames.push(frame.to_gray());
             }
+            checkpoint()?;
         }
         let fps = video.fps().map(|fps| fps / stride as f64);
         return Ok((frames, fps));
@@ -105,6 +115,7 @@ pub fn read_frames(
             Some(lo) => scale_to_u8_gray(&gray, lo, hi.unwrap_or(255.0)),
             None => gray,
         });
+        checkpoint()?;
     }
     Ok((frames, fps))
 }

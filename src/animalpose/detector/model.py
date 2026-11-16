@@ -48,13 +48,23 @@ class CenterDetector(nn.Module):
         return out
 
 
-def decode(heat_logits: torch.Tensor, size: torch.Tensor, offset: torch.Tensor, stride: int, max_det: int = 20):
+def decode(heat_logits: torch.Tensor, size: torch.Tensor, offset: torch.Tensor, stride: int, max_det: int = 20,
+           *, for_export: bool = False):
     """Peak extraction with export-friendly ops. Returns boxes, scores, flat indices."""
     b, _, h, w = heat_logits.shape
     heat = torch.sigmoid(heat_logits)
     peaks = F.max_pool2d(heat, 3, stride=1, padding=1)
     heat = heat * (peaks == heat).to(heat.dtype)
-    scores, idx = torch.topk(heat.reshape(b, -1), max_det, dim=1)
+    flat = heat.reshape(b, -1)
+    if for_export:
+        # ONNX and Torch can break ties differently. Rank exact ties by flat index in
+        # float64, with a perturbation below the spacing of distinct float32 scores.
+        positions = torch.arange(h * w, device=heat.device, dtype=torch.float64)
+        ranking = flat.to(torch.float64) * (1 - (positions / (h * w)) * 2**-26)
+        idx = torch.topk(ranking, max_det, dim=1).indices
+        scores = flat.gather(1, idx)
+    else:
+        scores, idx = torch.topk(flat, max_det, dim=1)
     ys = torch.div(idx, w, rounding_mode="floor").to(heat.dtype)
     xs = (idx - ys.to(idx.dtype) * w).to(heat.dtype)
     gather = idx.unsqueeze(1).expand(-1, 2, -1)
@@ -64,6 +74,8 @@ def decode(heat_logits: torch.Tensor, size: torch.Tensor, offset: torch.Tensor, 
     cy = (ys + off[:, 1]) * stride
     bw, bh = wh[:, 0] * stride, wh[:, 1] * stride
     boxes = torch.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], dim=-1)
+    if for_export:
+        boxes = torch.where(scores.unsqueeze(-1) > 0, boxes, 0.0)
     return boxes, scores, idx
 
 
@@ -77,7 +89,7 @@ class DetectorExport(nn.Module):
 
     def forward(self, images: torch.Tensor):
         out = self.model(images)
-        boxes, scores, _ = decode(out["heat"], out["size"], out["offset"], self.model.stride, self.max_det)
+        boxes, scores, _ = decode(out["heat"], out["size"], out["offset"], self.model.stride, self.max_det, for_export=True)
         return boxes, scores
 
 

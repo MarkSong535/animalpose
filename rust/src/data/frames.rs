@@ -91,8 +91,16 @@ impl Source {
 
     /// `Source.frames(indices)`: the frames at `indices`, sorted, with their indices.
     pub fn frames_at(&self, indices: &[usize]) -> Result<Vec<(usize, Bgr)>> {
+        self.frames_at_with_checkpoint(indices, || Ok(()))
+    }
+
+    fn frames_at_with_checkpoint(
+        &self,
+        indices: &[usize],
+        mut checkpoint: impl FnMut() -> Result<()>,
+    ) -> Result<Vec<(usize, Bgr)>> {
         match self {
-            Self::Video(path, _) => video::frames_at(path, indices),
+            Self::Video(path, _) => video::frames_at_with_checkpoint(path, indices, checkpoint),
             Self::Images(_, files) => {
                 let mut wanted: Vec<usize> = indices.to_vec();
                 wanted.sort_unstable();
@@ -100,7 +108,11 @@ impl Source {
                 wanted
                     .into_iter()
                     .filter(|i| *i < files.len())
-                    .map(|i| Ok((i, read_bgr(&files[i])?)))
+                    .map(|i| {
+                        let frame = read_bgr(&files[i])?;
+                        checkpoint()?;
+                        Ok((i, frame))
+                    })
                     .collect()
             }
         }
@@ -146,6 +158,15 @@ impl Source {
     /// `frames.py:sampled_background`: the grey median of `n` frames spread over the recording
     /// (`np.linspace(0, total - 1, min(n, total)).astype(int)`).
     pub fn sampled_background(&self, n: usize, max_frames: Option<usize>) -> Result<GrayF> {
+        self.sampled_background_with_checkpoint(n, max_frames, || Ok(()))
+    }
+
+    pub(crate) fn sampled_background_with_checkpoint(
+        &self,
+        n: usize,
+        max_frames: Option<usize>,
+        checkpoint: impl FnMut() -> Result<()>,
+    ) -> Result<GrayF> {
         let total = self.n_frames().min(max_frames.unwrap_or(usize::MAX));
         ensure!(total > 0, "{} has no frames", self.path().display());
         let k = n.min(total).max(1);
@@ -159,7 +180,7 @@ impl Source {
                 }
             })
             .collect();
-        let frames = self.frames_at(&indices)?;
+        let frames = self.frames_at_with_checkpoint(&indices, checkpoint)?;
         ensure!(!frames.is_empty(), "no readable frames in {}", self.path().display());
         let grays: Vec<GrayF> = frames.iter().map(|(_, f)| f.to_gray()).collect();
         Ok(pixel_median(&grays))

@@ -37,6 +37,8 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 # `--features gui`: egui with the native OpenGL backend, and nokhwa for USB cameras.
 eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow"] }
 nokhwa = { version = "0.10", optional = true, features = ["input-native"] }
+rfd = { version = "0.15", optional = true }
+tempfile = { version = "3", optional = true }
 
 # `--features mps`: inference on the GPU through Metal Performance Shaders graphs (macOS). Rust
 # bindings to the system frameworks; no C toolchain.
@@ -48,7 +50,14 @@ objc2-metal-performance-shaders = { version = "0.3", optional = true }
 objc2-metal-performance-shaders-graph = { version = "0.3", optional = true }
 
 [features]
-gui = ["mps", "dep:eframe", "dep:nokhwa"]
+# The desktop application's state and actions (cameras, recording, the model library, batch
+# processing), shared by the egui window and the native macOS app.
+app = ["mps", "dep:nokhwa", "dep:tempfile"]
+# The egui window (`animalpose-gui`): Windows and Linux, and macOS without the native app.
+gui = ["app", "dep:eframe", "dep:rfd"]
+# The C interface the SwiftUI macOS app links (`macos/`), built as a static library with
+# `cargo rustc --release --lib --features ffi --crate-type staticlib`.
+ffi = ["app"]
 mps = [
     "dep:objc2",
     "dep:objc2-foundation",
