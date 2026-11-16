@@ -74,8 +74,8 @@ def bouts(lab: np.ndarray):
     return list(zip(starts, ends, lab[starts]))
 
 
-# Kinematic signatures, checked against the clusters a person named by eye on one recording (see ``agree_with``). Features are
-# the ones :func:`kinematics` returns: ``speed`` and ``posture`` in body lengths/s, ``length`` the apparent
+# Kinematic signatures, checked against the clusters a person named by eye on one recording (see ``agree_with``).
+# Features are the ones :func:`kinematics` returns: ``speed`` and ``posture`` in body lengths/s, ``length`` the apparent
 # nose-to-tail length over its median (a top camera foreshortens a rearing or curled animal), ``turn`` rad/s,
 # ``head_motion`` nose speed relative to the head, ``bend`` the angle between the front and rear halves. The
 # first matching rule wins, so specific postures come first; a cluster whose kinematics are physically

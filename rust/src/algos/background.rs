@@ -20,11 +20,7 @@ pub fn median_background<I: ToGray>(frames: &[I], n: usize) -> GrayF {
     if frames.is_empty() {
         return GrayF::default();
     }
-    let step = if n == 0 {
-        frames.len()
-    } else {
-        (frames.len() / n).max(1)
-    };
+    let step = frames.len().checked_div(n).unwrap_or(frames.len()).max(1);
     let picked: Vec<GrayF> = frames.iter().step_by(step).map(|f| f.to_gray()).collect();
     let (width, height) = (picked[0].width, picked[0].height);
     let mut out = vec![0.0f32; picked[0].pixels.len()];

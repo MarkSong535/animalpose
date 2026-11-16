@@ -230,7 +230,7 @@ pub fn session_logits(model: &Model, sessions: &[Session], conf_thresh: f64) -> 
     let mut out = Vec::with_capacity(sessions.len());
     for s in sessions {
         let (t, k) = (s.frames, s.keypoints);
-        let d = if t * k > 0 { s.coords.len() / (t * k) } else { 2 };
+        let d = s.coords.len().checked_div(t * k).unwrap_or(2);
         let x: Vec<f32> = s
             .coords
             .iter()

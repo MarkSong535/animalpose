@@ -302,8 +302,8 @@ mod tests {
         assert!(close(kin.axis[0][0], 10.0 / (10.0 + 1e-6), 1e-9));
         assert!(close(kin.axis[0][1], 0.0, 1e-12));
         // 1 px/frame at 30 fps with a 10 px body = 3 body lengths/s.
-        for t in 5..25 {
-            assert!(close(kin.speed[t], 3.0, 1e-9), "t={t} {}", kin.speed[t]);
+        for (t, speed) in kin.speed.iter().enumerate().take(25).skip(5) {
+            assert!(close(*speed, 3.0, 1e-9), "t={t} {speed}");
         }
         // Edges of the 9-tap moving average truncate: 5 and 8 valid samples.
         assert!(

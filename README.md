@@ -28,14 +28,14 @@ DeepLabCut trains one network per project and keypoint set. Here:
 ```bash
 git clone <repo> && cd animalpose && git lfs pull      # weights/*_general.pt
 pip install -e ".[dev]"
-animalpose predict --video my_video.mp4 --out outputs/run   # tracks.csv, behavior.csv, overlay.mp4
+animalpose predict --video myvideo.mp4 --out outputs/run   # tracks.csv, behavior.csv, overlay.mp4
 ```
 
 Or with no Python at all:
 
 ```bash
 cd rust && cargo build --release
-./target/release/animalpose predict --video my_video.mp4 --out outputs/run
+./target/release/animalpose predict --video myvideo.mp4 --out outputs/run
 ```
 
 The desktop app does live tracking from USB cameras, records, and analyzes the recording. On a Mac it
@@ -53,14 +53,14 @@ behavior). Video input needs `ffmpeg` on `PATH`.
 No hand labels needed:
 
 ```bash
-animalpose data audit my_video.mp4 --out configs/camera.yaml        # blur, noise, animal size
-animalpose label --root videos/ --include my_video --boxes blob --range 0 0.8 --no-holdout \
-    --out data/processed/my_video                                   # first 80 % of the recording
+animalpose data audit myvideo.mp4 --out configs/camera.yaml        # blur, noise, animal size
+animalpose label --root videos/ --include myvideo --boxes blob --range 0 0.8 --no-holdout \
+    --out data/processed/myvideo                                   # first 80 % of the recording
 animalpose finetune pose configs/pose.yaml weights/pose_general.pt \
-    data.source=coco data.json=data/processed/my_video/train.json data.camera_profile=configs/camera.yaml
-animalpose eval unlabeled --root videos/ --include my_video --all-sources --range 0.8 1.0 \
+    data.source=coco data.json=data/processed/myvideo/train.json data.camera_profile=configs/camera.yaml
+animalpose eval unlabeled --root videos/ --include myvideo --all-sources --range 0.8 1.0 \
     --pairs weights/detector_general.pt:weights/pose_general.pt weights/detector_general.pt:runs/pose.pt
-animalpose behavior cluster --tracks outputs/run/tracks.npz --video my_video.mp4 --out outputs/run/clusters
+animalpose behavior cluster --tracks outputs/run/tracks.npz --video myvideo.mp4 --out outputs/run/clusters
 ```
 
 `label` keeps only confident detections and keypoints that agree under a mirror flip.

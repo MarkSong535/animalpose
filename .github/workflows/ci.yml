@@ -29,16 +29,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url "$TORCH_INDEX"
           pip install -e ".[dev]" ruff==0.17.3
+      - uses: ./.github/actions/setup-ffmpeg
       - name: Lint
         run: ruff check src tests
       - name: Test with coverage
         run: bash scripts/coverage.sh
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage.xml
           flags: python
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: MarkSong535/animalpose
           fail_ci_if_error: false
 
   python-platform:
@@ -61,6 +63,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url ${{ env.TORCH_INDEX }}
           pip install -e ".[dev]"
+      - uses: ./.github/actions/setup-ffmpeg
       - name: Test (skips the slow marker)
         run: pytest -q -m "not slow"
 
@@ -86,11 +89,12 @@ jobs:
           - name: windows-x86_64
             runs-on: windows-latest
           - name: macos-x86_64
-            runs-on: macos-13
+            runs-on: macos-26-intel
           - name: macos-aarch64
-            runs-on: macos-14
+            runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ffmpeg
       - name: Install Rust toolchain
         run: rustup toolchain install stable --component rustfmt --component clippy
       - name: Show toolchain
@@ -115,7 +119,7 @@ jobs:
 
   rust-gui-macos:
     name: rust (macOS, GPU + GUI features)
-    runs-on: macos-14
+    runs-on: macos-latest
     defaults:
       run:
         working-directory: rust
@@ -124,6 +128,7 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ffmpeg
       - name: Install Rust toolchain
         run: rustup toolchain install stable --component clippy
       - name: Clippy (mps, gui)
@@ -132,3 +137,41 @@ jobs:
           cargo clippy --all-targets --features gui -- -D warnings
       - name: Test (gui, which includes mps)
         run: cargo test --release --features gui
+
+  # Line coverage of the crate, reported to Codecov next to the python flag. `cargo-llvm-cov`
+  # instruments the test binaries, so this runs the whole workspace suite once and writes the
+  # Codecov JSON in the same pass.
+  rust-coverage:
+    name: rust coverage
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: rust
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ffmpeg
+      - name: Install Rust toolchain
+        run: rustup toolchain install stable --component llvm-tools-preview
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: rust/target/
+          key: cargo-llvm-cov-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: cargo-llvm-cov-
+      - name: Test with coverage
+        run: |
+          cargo llvm-cov --workspace --all-targets --ignore-run-fail \
+            --codecov --output-path coverage/codecov.json
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: rust/coverage/codecov.json
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: MarkSong535/animalpose
+          fail_ci_if_error: false

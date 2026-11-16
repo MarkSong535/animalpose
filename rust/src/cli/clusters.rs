@@ -1185,7 +1185,7 @@ pub fn label_clusters(
                 ("conf", npy_f32(&[hi - lo, k], &conf)),
                 ("labels", npy_i64(&[hi - lo], &beh[lo..hi])),
                 ("fps", npy_f64(&[], &[fps])),
-                ("animal", npy_str(&[], &[animal.clone()])),
+                ("animal", npy_str(&[], std::slice::from_ref(&animal))),
                 ("view", npy_str(&[], &[view.to_string()])),
                 ("label_names", npy_str(&[names.len()], &names)),
             ],

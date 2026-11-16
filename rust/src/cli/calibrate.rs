@@ -147,7 +147,8 @@ pub fn calibrate(points: &Path, out: &Path, refine: Option<&Path>) -> Result<Vec
             }
             None => calibrate_dlt(&x3, &x2, size, name)?,
         };
-        let err = &reprojection_errors(std::slice::from_ref(&cam), &x3, &[x2.clone()])[0];
+        let err =
+            &reprojection_errors(std::slice::from_ref(&cam), &x3, std::slice::from_ref(&x2))[0];
         let mean = err.iter().sum::<f64>() / err.len().max(1) as f64;
         let max = err.iter().fold(f64::NEG_INFINITY, |a, b| a.max(*b));
         println!("{name}: mean reprojection error {mean:.2}px (max {max:.2})");

@@ -280,7 +280,7 @@ mod tests {
                 "0.6",
                 "--no-holdout",
                 "--include",
-                "my_video",
+                "myvideo",
                 "other",
                 "--quiet",
                 "--det-size",
@@ -295,7 +295,7 @@ mod tests {
         );
         assert_eq!(
             o.include,
-            Some(vec!["my_video".to_string(), "other".to_string()])
+            Some(vec!["myvideo".to_string(), "other".to_string()])
         );
         assert_eq!(o.det_size, (240, 320));
         assert!(label_command()

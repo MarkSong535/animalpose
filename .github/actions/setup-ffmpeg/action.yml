@@ -1,0 +1,43 @@
+name: Install ffmpeg
+description: >
+  Installs the `ffmpeg` and `ffprobe` executables on Linux, macOS and Windows runners. The Rust
+  crate decodes video and encodes `overlay.mp4` through those executables (`rust/src/data/video.rs`)
+  and `animalpose behavior plot` pipes its clip through `ffmpeg`
+  (`src/animalpose/behavior/plot.py`), so the suite needs them on `PATH`. The runner images ship an
+  ffmpeg inconsistently (and not at all on the ARM Linux runners), so every job that runs tests or
+  examples calls this action instead of trusting the image.
+
+runs:
+  using: composite
+  steps:
+    - name: Check for an existing ffmpeg
+      id: present
+      shell: bash
+      run: |
+        if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+          echo "found ffmpeg: $(command -v ffmpeg)"
+          echo "found ffprobe: $(command -v ffprobe)"
+          echo present=true >>"$GITHUB_OUTPUT"
+        else
+          echo present=false >>"$GITHUB_OUTPUT"
+        fi
+    - name: Install ffmpeg (Linux)
+      if: steps.present.outputs.present == 'false' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends ffmpeg
+    - name: Install ffmpeg (macOS)
+      if: steps.present.outputs.present == 'false' && runner.os == 'macOS'
+      shell: bash
+      run: brew install ffmpeg
+    - name: Install ffmpeg (Windows)
+      if: steps.present.outputs.present == 'false' && runner.os == 'Windows'
+      shell: bash
+      run: choco install ffmpeg -y --no-progress
+    - name: Report the toolchain
+      shell: bash
+      run: |
+        ffmpeg -hide_banner -version | head -1
+        ffprobe -hide_banner -version | head -1
+        command -v ffmpeg ffprobe

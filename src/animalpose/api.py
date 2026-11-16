@@ -4,9 +4,9 @@
 
     animalpose.train("pose", "configs/pose.yaml", ["train.steps=200"])
     animalpose.finetune("detector", "configs/detector.yaml", init="weights/detector_general.pt")
-    animalpose.label("data/raw/videos", include=["my_video"], boxes="blob", out="data/processed/my_video_pseudo")
-    animalpose.predict("my_video.mp4", config="configs/pipeline.yaml", out="outputs/my_video")
-    animalpose.behavior("cluster", tracks="outputs/my_video/tracks.npz", video="my_video.mp4", out="outputs/my_video/clusters")
+    animalpose.label("data/raw/videos", include=["myvideo"], boxes="blob", out="data/processed/myvideo_pseudo")
+    animalpose.predict("myvideo.mp4", config="configs/pipeline.yaml", out="outputs/myvideo")
+    animalpose.behavior("cluster", tracks="outputs/myvideo/tracks.npz", video="myvideo.mp4", out="outputs/myvideo/clusters")
 """
 
 from __future__ import annotations

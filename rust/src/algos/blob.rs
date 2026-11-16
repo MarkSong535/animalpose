@@ -172,8 +172,8 @@ pub fn connected_components(mask: &Image) -> Vec<Component> {
     let mut labels: Vec<usize> = vec![usize::MAX; n];
     // (x_min, y_min, x_max, y_max, area) per label.
     let mut spans: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
-    for i in 0..n {
-        if mask.pixels[i] == 0 {
+    for (i, pixel) in mask.pixels.iter().enumerate() {
+        if *pixel == 0 {
             continue;
         }
         let (x, y) = ((i % w) as u32, (i / w) as u32);

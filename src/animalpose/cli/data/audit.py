@@ -22,7 +22,7 @@ given exposure (``--exposure``), frame contrast, background level, sensor noise,
 sharpness. The YAML it writes goes to ``data.camera_profile`` in a training config, as a path
 or inline. Compression cannot be measured from decoded frames, so ``jpeg`` is assumed.
 
-    animalpose data audit my_video.mp4 --out configs/camera.yaml
+    animalpose data audit myvideo.mp4 --out configs/camera.yaml
     animalpose data audit --root ~/animal/training_data --frames 48
 """
 

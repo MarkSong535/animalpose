@@ -6,9 +6,9 @@ The calls most people need, importable from the top of the package::
 
     animalpose.train("pose", "configs/pose.yaml")
     animalpose.finetune("pose", "configs/pose.yaml", init="weights/pose_general.pt")
-    animalpose.label("data/raw/videos", include=["my_video"], out="data/processed/my_video_pseudo")
-    animalpose.predict("my_video.mp4", config="configs/pipeline.yaml")
-    animalpose.cluster_tracks(tracks="outputs/my_video/tracks.npz", video="my_video.mp4", out="outputs/my_video/clusters")
+    animalpose.label("data/raw/videos", include=["myvideo"], out="data/processed/myvideo_pseudo")
+    animalpose.predict("myvideo.mp4", config="configs/pipeline.yaml")
+    animalpose.cluster_tracks(tracks="outputs/myvideo/tracks.npz", video="myvideo.mp4", out="outputs/myvideo/clusters")
 
 ``animalpose.behavior`` is the classifier subpackage, not a function: bootstrap labels with
 ``cluster_tracks`` / ``write_naming`` / ``label_clusters``, the three steps of

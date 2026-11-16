@@ -6,7 +6,7 @@ OpenCV, no C toolchain. Video goes through the `ffmpeg` / `ffprobe` executables.
 
 ```bash
 cargo build --release
-./target/release/animalpose predict --video my_video.mp4 --out outputs/run
+./target/release/animalpose predict --video myvideo.mp4 --out outputs/run
 cargo test --release
 ```
 

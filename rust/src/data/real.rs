@@ -465,10 +465,9 @@ pub fn lp_crim13_mapping(bodypart: &str) -> Option<(usize, &'static str)> {
         rest
     } else if let Some(p) = bodypart.strip_suffix("_black").filter(|p| !p.is_empty()) {
         ("black", p)
-    } else if let Some(p) = bodypart.strip_suffix("_white").filter(|p| !p.is_empty()) {
-        ("white", p)
     } else {
-        return None;
+        let p = bodypart.strip_suffix("_white").filter(|p| !p.is_empty())?;
+        ("white", p)
     };
     if part.is_empty() {
         return None;
