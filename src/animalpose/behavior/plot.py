@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import cv2
@@ -60,6 +62,40 @@ def ethogram(out: str | Path, names, full: np.ndarray, times: np.ndarray, modell
     return share
 
 
+class _Cv2Encoder:
+    """`cv2.VideoWriter` shaped like an `ffmpeg` child: `.stdin.write(raw)`, `.stdin.close()`, `.wait()`.
+
+    The fallback for machines without the `ffmpeg` executable, where OpenCV's own muxer is the only
+    writer available. It encodes `mp4v` (MPEG-4 Part 2) instead of H.264, so the clip is larger and
+    some browsers will not play it, but every OpenCV reader opens it.
+    """
+
+    def __init__(self, out: str | Path, fps: float, width: int, height: int):
+        self.shape = (height, width)
+        self.vw = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        self.stdin = self
+
+    def write(self, raw: bytes) -> None:
+        self.vw.write(np.frombuffer(raw, np.uint8).reshape(*self.shape, 3))
+
+    def close(self) -> None:
+        self.vw.release()
+
+    def wait(self) -> int:
+        return 0
+
+
+def _encoder(out: str | Path, fps: float, width: int, height: int):
+    """A raw-BGR frame sink: an `ffmpeg` child when ffmpeg is installed, else `_Cv2Encoder`."""
+    if not shutil.which("ffmpeg"):
+        print(f"ffmpeg is not installed: {Path(out).name} falls back to OpenCV's mp4v writer",
+              file=sys.stderr, flush=True)
+        return _Cv2Encoder(out, fps, width, height)
+    return subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s",
+                             f"{width}x{height}", "-r", f"{fps:.4f}", "-i", "-", "-c:v", "libx264", "-pix_fmt",
+                             "yuv420p", "-crf", "20", str(out)], stdin=subprocess.PIPE)
+
+
 def clip(out: str | Path, video: str | Path, names, z, start_s: float, seconds: float, k: int,
          scale: int = 3, half: int = 60) -> Path:
     """A window of the video zoomed on the animal, with its skeleton and the top-``k`` behaviors."""
@@ -74,9 +110,7 @@ def clip(out: str | Path, video: str | Path, names, z, start_s: float, seconds: 
     cap.set(cv2.CAP_PROP_POS_FRAMES, first)
     size = 2 * half * scale
     panel = 300
-    ff = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s",
-                           f"{size + panel}x{size}", "-r", f"{fps:.4f}", "-i", "-", "-c:v", "libx264", "-pix_fmt",
-                           "yuv420p", "-crf", "20", str(out)], stdin=subprocess.PIPE)
+    ff = _encoder(out, fps, size + panel, size)
     mid = CANONICAL.index("spine_mid")
     centre = None
     for f in range(first, last):

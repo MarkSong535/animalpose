@@ -89,3 +89,5 @@ tests/fixtures/models/detector_general.safetensors
 /scripts/pseudo_label_mirror.py
 /tests/fixtures/models/*_cai.*
 /src/*.egg-info/
+docker/
+.dockerignore
