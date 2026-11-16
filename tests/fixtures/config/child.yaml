@@ -1,0 +1,7 @@
+extends: parent.yaml
+train:
+  steps: 5
+model:
+  backbone: {width: 64}
+data:
+  sources: [{source: synthetic, weight: 1.0}]

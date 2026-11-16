@@ -1,0 +1,733 @@
+{
+ "base": "train:\n  steps: 10\n  seed: 0\ndata:\n  species: [mouse]\ntracker:\n  max_animals: 2\n",
+ "cases": [
+  {
+   "override": "train.steps=200",
+   "key": "train.steps",
+   "value": {
+    "kind": "int",
+    "data": 200
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.steps=-3",
+   "key": "train.steps",
+   "value": {
+    "kind": "int",
+    "data": -3
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.steps=+7",
+   "key": "train.steps",
+   "value": {
+    "kind": "int",
+    "data": 7
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.lr=5.0e-4",
+   "key": "train.lr",
+   "value": {
+    "kind": "float",
+    "data": 0.0005,
+    "repr": "0.0005"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.lr=.5",
+   "key": "train.lr",
+   "value": {
+    "kind": "float",
+    "data": 0.5,
+    "repr": "0.5"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.lr=-.inf",
+   "key": "train.lr",
+   "value": {
+    "kind": "float",
+    "data": null,
+    "repr": "-inf"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.steps=1_000",
+   "key": "train.steps",
+   "value": {
+    "kind": "int",
+    "data": 1000
+   },
+   "known_difference": true,
+   "note": "yaml 1.1 allows '_' digit separators; yaml 1.2 reads the string"
+  },
+  {
+   "override": "train.steps=0x10",
+   "key": "train.steps",
+   "value": {
+    "kind": "int",
+    "data": 16
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.steps=200 # a comment",
+   "key": "train.steps",
+   "value": {
+    "kind": "int",
+    "data": 200
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.log_every=True",
+   "key": "train.log_every",
+   "value": {
+    "kind": "bool",
+    "data": true
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.log_every=true",
+   "key": "train.log_every",
+   "value": {
+    "kind": "bool",
+    "data": true
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.log_every=False",
+   "key": "train.log_every",
+   "value": {
+    "kind": "bool",
+    "data": false
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.log_every=yes",
+   "key": "train.log_every",
+   "value": {
+    "kind": "bool",
+    "data": true
+   },
+   "known_difference": true,
+   "note": "yaml 1.1 spells a boolean 'yes'; yaml 1.2 reads the string"
+  },
+  {
+   "override": "train.log_every=off",
+   "key": "train.log_every",
+   "value": {
+    "kind": "bool",
+    "data": false
+   },
+   "known_difference": true,
+   "note": "yaml 1.1 spells a boolean 'off'; yaml 1.2 reads the string"
+  },
+  {
+   "override": "data.species=null",
+   "key": "data.species",
+   "value": {
+    "kind": "null"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "data.species=",
+   "key": "data.species",
+   "value": {
+    "kind": "null"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "data.species=[mouse, rat]",
+   "key": "data.species",
+   "value": {
+    "kind": "list",
+    "data": [
+     {
+      "kind": "str",
+      "data": "mouse"
+     },
+     {
+      "kind": "str",
+      "data": "rat"
+     }
+    ]
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "data.species=mouse",
+   "key": "data.species",
+   "value": {
+    "kind": "str",
+    "data": "mouse"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.name=\"two  spaces\"",
+   "key": "train.name",
+   "value": {
+    "kind": "str",
+    "data": "two  spaces"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.note=a=b",
+   "key": "train.note",
+   "value": {
+    "kind": "str",
+    "data": "a=b"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.seed=0755",
+   "key": "train.seed",
+   "value": {
+    "kind": "int",
+    "data": 493
+   },
+   "known_difference": true,
+   "note": "yaml 1.1 reads a leading 0 as octal (493); yaml 1.2 reads the string"
+  },
+  {
+   "override": "model.head.temporal.window=16",
+   "key": "model.head.temporal.window",
+   "value": {
+    "kind": "int",
+    "data": 16
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "tracker.max_animals=4",
+   "key": "tracker.max_animals",
+   "value": {
+    "kind": "int",
+    "data": 4
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "tracker.max_lost=0",
+   "key": "tracker.max_lost",
+   "value": {
+    "kind": "int",
+    "data": 0
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "x.time=10:30",
+   "key": "x.time",
+   "value": {
+    "kind": "int",
+    "data": 630
+   },
+   "known_difference": true,
+   "note": "yaml 1.1 has sexagesimal numbers (630); yaml 1.2 reads the string"
+  },
+  {
+   "override": "x.version=1.2.3",
+   "key": "x.version",
+   "value": {
+    "kind": "str",
+    "data": "1.2.3"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "x.nan=nan",
+   "key": "x.nan",
+   "value": {
+    "kind": "str",
+    "data": "nan"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "x.dotnan=.nan",
+   "key": "x.dotnan",
+   "value": {
+    "kind": "float",
+    "data": null,
+    "repr": "nan"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "x.inf=inf",
+   "key": "x.inf",
+   "value": {
+    "kind": "str",
+    "data": "inf"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "x.dotinf=.inf",
+   "key": "x.dotinf",
+   "value": {
+    "kind": "float",
+    "data": null,
+    "repr": "inf"
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "train.steps.deeper=1",
+   "key": "train.steps.deeper",
+   "error": "TypeError"
+  },
+  {
+   "override": "train=1",
+   "key": "train",
+   "value": {
+    "kind": "int",
+    "data": 1
+   },
+   "known_difference": false,
+   "note": null
+  },
+  {
+   "override": "=1",
+   "key": "",
+   "value": {
+    "kind": "int",
+    "data": 1
+   },
+   "known_difference": true,
+   "note": "the CLI rejects an override whose key is empty; python stores it under ''"
+  }
+ ],
+ "extends": [
+  {
+   "file": "child.yaml",
+   "overrides": [],
+   "value": {
+    "kind": "map",
+    "data": {
+     "train": {
+      "kind": "map",
+      "data": {
+       "steps": {
+        "kind": "int",
+        "data": 5
+       },
+       "lr": {
+        "kind": "float",
+        "data": 0.5,
+        "repr": "0.5"
+       }
+      }
+     },
+     "data": {
+      "kind": "map",
+      "data": {
+       "species": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "str",
+          "data": "rat"
+         }
+        ]
+       },
+       "sources": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "map",
+          "data": {
+           "source": {
+            "kind": "str",
+            "data": "synthetic"
+           },
+           "weight": {
+            "kind": "float",
+            "data": 1.0,
+            "repr": "1.0"
+           }
+          }
+         }
+        ]
+       }
+      }
+     },
+     "model": {
+      "kind": "map",
+      "data": {
+       "backbone": {
+        "kind": "map",
+        "data": {
+         "name": {
+          "kind": "str",
+          "data": "tiny"
+         },
+         "width": {
+          "kind": "int",
+          "data": 64
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "file": "cycle_a.yaml",
+   "overrides": [],
+   "error": "ConfigError"
+  },
+  {
+   "file": "extends_is_a_number.yaml",
+   "overrides": [],
+   "error": "ConfigError"
+  },
+  {
+   "file": "grandchild.yaml",
+   "overrides": [],
+   "value": {
+    "kind": "map",
+    "data": {
+     "train": {
+      "kind": "map",
+      "data": {
+       "steps": {
+        "kind": "int",
+        "data": 5
+       },
+       "lr": {
+        "kind": "float",
+        "data": 0.5,
+        "repr": "0.5"
+       },
+       "seed": {
+        "kind": "int",
+        "data": 9
+       }
+      }
+     },
+     "data": {
+      "kind": "map",
+      "data": {
+       "species": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "str",
+          "data": "rat"
+         }
+        ]
+       },
+       "sources": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "map",
+          "data": {
+           "source": {
+            "kind": "str",
+            "data": "synthetic"
+           },
+           "weight": {
+            "kind": "float",
+            "data": 1.0,
+            "repr": "1.0"
+           }
+          }
+         }
+        ]
+       }
+      }
+     },
+     "model": {
+      "kind": "map",
+      "data": {
+       "backbone": {
+        "kind": "map",
+        "data": {
+         "name": {
+          "kind": "str",
+          "data": "tiny"
+         },
+         "width": {
+          "kind": "int",
+          "data": 64
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "file": "missing_base.yaml",
+   "overrides": [],
+   "error": "ConfigError"
+  },
+  {
+   "file": "no_base.yaml",
+   "overrides": [],
+   "value": {
+    "kind": "map",
+    "data": {
+     "train": {
+      "kind": "map",
+      "data": {
+       "steps": {
+        "kind": "int",
+        "data": 2
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "file": "of_base.yaml",
+   "overrides": [],
+   "value": {
+    "kind": "map",
+    "data": {
+     "train": {
+      "kind": "map",
+      "data": {
+       "steps": {
+        "kind": "int",
+        "data": 3
+       },
+       "seed": {
+        "kind": "int",
+        "data": 0
+       }
+      }
+     },
+     "data": {
+      "kind": "map",
+      "data": {
+       "species": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "str",
+          "data": "rat"
+         }
+        ]
+       }
+      }
+     },
+     "tracker": {
+      "kind": "map",
+      "data": {
+       "max_animals": {
+        "kind": "int",
+        "data": 2
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "file": "overridden.yaml",
+   "overrides": [
+    "train.steps=1",
+    "data.species=[pig]"
+   ],
+   "value": {
+    "kind": "map",
+    "data": {
+     "train": {
+      "kind": "map",
+      "data": {
+       "steps": {
+        "kind": "int",
+        "data": 1
+       },
+       "lr": {
+        "kind": "float",
+        "data": 0.5,
+        "repr": "0.5"
+       }
+      }
+     },
+     "data": {
+      "kind": "map",
+      "data": {
+       "species": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "str",
+          "data": "pig"
+         }
+        ]
+       },
+       "sources": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "map",
+          "data": {
+           "source": {
+            "kind": "str",
+            "data": "coco"
+           },
+           "weight": {
+            "kind": "float",
+            "data": 0.5,
+            "repr": "0.5"
+           }
+          }
+         }
+        ]
+       }
+      }
+     },
+     "model": {
+      "kind": "map",
+      "data": {
+       "backbone": {
+        "kind": "map",
+        "data": {
+         "name": {
+          "kind": "str",
+          "data": "tiny"
+         },
+         "width": {
+          "kind": "int",
+          "data": 32
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "file": "two_parents.yaml",
+   "overrides": [],
+   "value": {
+    "kind": "map",
+    "data": {
+     "train": {
+      "kind": "map",
+      "data": {
+       "steps": {
+        "kind": "int",
+        "data": 30
+       },
+       "lr": {
+        "kind": "float",
+        "data": 0.25,
+        "repr": "0.25"
+       },
+       "seed": {
+        "kind": "int",
+        "data": 7
+       }
+      }
+     },
+     "data": {
+      "kind": "map",
+      "data": {
+       "species": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "str",
+          "data": "mouse"
+         },
+         {
+          "kind": "str",
+          "data": "rat"
+         }
+        ]
+       },
+       "sources": {
+        "kind": "list",
+        "data": [
+         {
+          "kind": "map",
+          "data": {
+           "source": {
+            "kind": "str",
+            "data": "coco"
+           },
+           "weight": {
+            "kind": "float",
+            "data": 0.5,
+            "repr": "0.5"
+           }
+          }
+         }
+        ]
+       }
+      }
+     },
+     "model": {
+      "kind": "map",
+      "data": {
+       "backbone": {
+        "kind": "map",
+        "data": {
+         "name": {
+          "kind": "str",
+          "data": "tiny"
+         },
+         "width": {
+          "kind": "int",
+          "data": 32
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

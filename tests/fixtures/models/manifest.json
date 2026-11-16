@@ -1,0 +1,30 @@
+{
+  "files": {
+    "behavior_general.json": "521440ab4513ff6c86614c1ddb009b1c54b49f8f8fd6a750705be73e7716882e",
+    "behavior_general.safetensors": "66e7fe535319789f8b257251964eb7aaddd843e3b826bdd1446c81a664b7e055",
+    "behavior_tiny.json": "34321bd06f4f1d3d9e51591f188d45a6157e16a21a6f48f675f027fd129f7f35",
+    "behavior_tiny.safetensors": "568c59a713d1e93f18602f20fee17a4c3324caa043bbc0d19341415ae43badc7",
+    "behavior_tiny_3d.json": "9724b7b1fcb6ed5fea0f932f32c5fa7dffc03eff21d80492d7e8ffbfdcd45e17",
+    "behavior_tiny_3d.safetensors": "4c6b52a1f07564438c283b169b04f8eca7c14ded7039e61c4b9c4c8614a98be7",
+    "detector_general.json": "f52a48e744983d42d3411c164f61d28ca9a9440a72aedd5fe1ecdcbae6495f4d",
+    "detector_general.safetensors": "7ec216ce883e20d5ba12c232e45ae07c89a0e53653b50554a08ed09d812761eb",
+    "detector_tiny.json": "7f3c3e8df74d38357ec373834defba69cb1d03c43fbe818100d482c5ffffa6b7",
+    "detector_tiny.safetensors": "368d21597301c60e615088399b7e9df9352ab8e8d7139192c81823613c02189c",
+    "detector_tiny_species.json": "d2c85fabed91e05b51a0a33847ce16fe0970c133dc1dd84d8c0753301265b369",
+    "detector_tiny_species.safetensors": "4e8e9c4a13e9f1ea08c68551452976e8612f4275b03a7bb4fd4fcbf51e5f87e7",
+    "pose_general.json": "8736dc32cfbcc93019f1fc035e782fae991cd739f43e15e58af9c4e57976b80f",
+    "pose_general.safetensors": "7c7ff7f9fd81a143ae31a3b9017494aa6240e6bcdf9ab5960a070edd3bad0970",
+    "pose_tiny.json": "10b52c01f0c92fccfe17ee78387f28946489b71d177defded9727f8872d290fd",
+    "pose_tiny.safetensors": "3067136ad7b82621f6cb762fdd41769e1b9ea80254d87715b6c10f0bd9d97d16",
+    "pose_tiny_context.json": "c8e3b5ca15d754d9b30fdef2ae383f7dbfe07aea8a2271f1655dbbba02e48e91",
+    "pose_tiny_context.safetensors": "76c0d6ed768c09f0231b922f08af8c6d2a59eecef4f5410abeeb81888c24c70b",
+    "temporal_tiny.json": "791d1c57f2f5bc32aef577522d9567d2cd267124b35b4db17cfcedd1a9964969",
+    "temporal_tiny.safetensors": "f4aa07fcaae8882a57d412406b1943deb5c7b7dd04255a90c2b80f17aa939d95",
+    "temporal_tiny_bidir.json": "940e7dc7d63bd02703f078c8c8a96d58e2ff049e9743c30f1b07a896b412cbc5",
+    "temporal_tiny_bidir.safetensors": "d0818f247a004c36a70b1fe45ec0dfeeac92be4453320660ebf3d48d8b25cfb3",
+    "temporal_tiny_noprior.json": "8b8c224606e91f22c62e0f923cad4bb48199532670ba2697b94565e26c96b69b",
+    "temporal_tiny_noprior.safetensors": "6bea9824f69e696987b1f99d7ae106a821fd3c31079b044735f502657bb27481"
+  },
+  "seed": 4242,
+  "tolerance": 0.0002
+}

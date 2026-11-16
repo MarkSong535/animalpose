@@ -1,0 +1,91 @@
+# ---------------------------------------------------------------- code + tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# editor / OS scratch
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ---------------------------------------------------------------- generated data
+# downloads + converters write these; rebuild with `animalpose data download|prepare`
+/data/
+/outputs/
+/recordings/
+/rust/recordings/
+
+# training + evaluation scratch
+/logs/
+*.log
+
+# the four general checkpoints that are versioned live in weights/
+/runs/
+/exported/
+
+# ---------------------------------------------------------------- build trees
+/cpp/build/
+/compile_commands.json
+/rust/target/
+/rust/target*/
+# `CARGO_TARGET_DIR=rust/target/cli` is relative to the directory cargo runs in, so running it from
+# `rust/` itself builds under `rust/rust/`.
+/rust/rust/
+
+# ---------------------------------------------------------------- weights
+# Only the four *general* checkpoints are versioned, through git-lfs (.gitattributes): the starting
+# points every fine-tune reads as `init:`. Fine-tuned checkpoints (runs/, exported/) are scratch.
+*.pt
+*.onnx
+*.ts
+*.safetensors
+*.ckpt
+*.pkl
+*.npz
+*.npy
+!weights/*.pt
+!tests/fixtures/**/*.safetensors
+!tests/fixtures/**/*.pt
+!tests/fixtures/**/*.npz
+# sidecars of the general checkpoints, too large to version twice: `animalpose fixtures models
+# --checkpoint weights/<kind>_general.pt` rewrites them
+tests/fixtures/models/pose_general.safetensors
+tests/fixtures/models/detector_general.safetensors
+
+# ---------------------------------------------------------------- scratch drawers
+# superseded checkpoints, logs and run outputs from earlier rounds; all regenerable, none of it source.
+/archives/
+
+# ---------------------------------------------------------------- kept local, never published
+# Training data, recording-specific configs, results tables, cluster scripts and the retired C++ demo
+# stay on this machine only. The four general checkpoints in weights/ are the only trained artifacts
+# the repository ships.
+/results/
+/slurm/
+/cpp/
+/docs/DATASETS.md
+/configs/ablations/
+/configs/*.yaml
+!/configs/pipeline.yaml
+!/configs/detector.yaml
+!/configs/pose.yaml
+!/configs/temporal.yaml
+!/configs/temporal3d.yaml
+!/configs/behavior.yaml
+!/configs/behavior3d.yaml
+/scripts/train_real.sh
+/scripts/pseudo_label_mirror.py
+/tests/fixtures/models/*_cai.*
+/src/*.egg-info/

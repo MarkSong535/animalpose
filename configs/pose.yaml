@@ -1,0 +1,25 @@
+# Stage 2: top-down pose over the canonical 25-keypoint vocabulary.
+device: auto
+output: runs/pose.pt
+model:
+  num_keypoints: 25
+  backbone: {name: tiny, width: 32, out_channels: 64}
+  embed_dim: 64
+data:
+  source: synthetic
+  crop_size: 128
+  image_size: [320, 256]
+  n_sims: 128
+  frames: 120
+  species: [mouse, rat]
+loss:
+  sigma: 1.5              # heatmap Gaussian, in heatmap cells (stride 4)
+  occluded_weight: 0.5    # labeled-but-occluded points trained as "not visible"
+  offset_weight: 0.05
+  embed_weight: 0.1       # supervised-contrastive identity embedding (needs ids)
+train:
+  steps: 4000
+  batch_size: 32
+  lr: 2.0e-3
+  workers: 4
+  log_every: 100

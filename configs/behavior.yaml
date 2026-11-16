@@ -1,0 +1,10 @@
+# Frame-wise behavior classifier on 2D pose sequences (random viewpoints).
+device: auto
+output: runs/behavior.pt
+model:
+  num_keypoints: 25
+  dims: 2
+  hidden: 96
+  classes: [resting, walking, rearing, grooming, eating]
+data: {window: 96, species: [mouse, rat]}
+train: {steps: 3000, batch_size: 32, lr: 2.0e-3, workers: 2, log_every: 100}

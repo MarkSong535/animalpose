@@ -1,0 +1,4 @@
+train:
+  seed: 7
+data:
+  species: [mouse, rat]

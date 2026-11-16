@@ -1,0 +1,8 @@
+train:
+  steps: 30
+  lr: 0.5
+data:
+  species: [rat]
+  sources: [{source: coco, weight: 0.5}]
+model:
+  backbone: {name: tiny, width: 32}

@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "animalpose"
+version = "0.1.0"
+description = "Species-agnostic multi-animal pose estimation, tracking, behavior and multi-view 3D for rodents and beyond"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "torch>=2.2",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "opencv-python-headless>=4.8",
+  "pyyaml>=6.0",
+]
+
+[project.scripts]
+animalpose = "animalpose.cli:main"
+
+[project.optional-dependencies]
+behavior = ["scikit-learn>=1.3"]  # `animalpose behavior cluster`
+plot = ["matplotlib>=3.7"]  # `animalpose behavior plot`
+export = ["onnx>=1.15", "onnxruntime>=1.17", "onnxscript>=0.1"]
+torchvision = ["torchvision>=0.17"]
+real = ["pandas>=2.0", "tables>=3.8"]  # real-dataset converters and DeepLabCut .h5 tracks
+# What CI installs: every package the suite imports except torchvision, whose encoder tests
+# skip when it is absent.
+dev = [
+  "pytest>=7",
+  "pytest-cov>=4",
+  "onnx>=1.15",
+  "onnxruntime>=1.17",
+  "onnxscript>=0.1",
+  "pandas>=2.0",
+  "tables>=3.8",
+  "scikit-learn>=1.3",
+  "matplotlib>=3.7",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+animalpose = ["behavior/behaviors.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["slow: end-to-end tests that train small models (seconds to a minute on CPU)"]
+
+[tool.ruff]
+line-length = 125
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B008", "E731", "B023", "B905"]
+
+# Coverage measures the library: the `eval` report commands print tables over the downloaded
+# datasets (14 GB, cluster-only) and are plumbing over src/animalpose/eval, so they are omitted.
+[tool.coverage.run]
+source = ["src/animalpose"]
+omit = ["*/cli/evaluate/*"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = true
+fail_under = 99
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "^\\s*raise NotImplementedError\\b",
+]

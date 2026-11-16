@@ -1,0 +1,5 @@
+extends: base.yaml
+train:
+  steps: 3
+data:
+  species: [rat]

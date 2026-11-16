@@ -1,0 +1,25 @@
+# Stage 1: class-agnostic animal detector.
+device: auto            # cuda -> mps -> cpu
+output: runs/detector.pt
+model:
+  backbone: {name: tiny, width: 32, out_channels: 64}   # or resnet18/34/50 (+ pretrained: true downloads ImageNet weights)
+  num_species: 0        # >0 adds a species head (mouse, rat, ...) for routing only
+data:
+  source: synthetic     # synthetic | coco
+  input_size: [256, 320]
+  image_size: [320, 256]
+  n_sims: 128
+  frames: 120
+  species: [mouse, rat]
+  max_animals: 4
+  # coco example:
+  # source: coco
+  # json: data/my_project/annotations.json
+  # images: data/my_project/images
+  # mapping: superanimal_topviewmouse
+train:
+  steps: 3000
+  batch_size: 16
+  lr: 2.0e-3
+  workers: 4
+  log_every: 100

@@ -1,0 +1,45 @@
+device: cpu
+checkpoints:
+  detector: tests/fixtures/pipeline/detector.safetensors
+  pose: tests/fixtures/pipeline/pose.safetensors
+  temporal: tests/fixtures/pipeline/temporal.safetensors
+  behavior: tests/fixtures/pipeline/behavior.safetensors
+pipeline:
+  det_size:
+  - 96
+  - 96
+  det_thresh: 0.0
+  max_det: 3
+  crop_size: 64
+  crop_padding: 1.25
+  kp_conf_thresh: 0.3
+  pair_decoding: true
+  pair_identity: true
+  pair_motion_frac: 0.1
+  background_filter: true
+  background_frames: 64
+  foreground_diff: 25.0
+  min_foreground: 0.05
+  detector_candidates:
+  - network
+  - blob
+  blob_score: 0.9
+  blob_diff: 25.0
+  blob_open_px: 3
+  blob_arena_roi: true
+  blob_calibrate: 0
+  merge_iou: 0.5
+  behavior_conf: 0.6
+  behavior_top_k: 3
+  behavior_smooth: 3
+  behavior_prior_adapt: true
+  behavior_prior_max_ratio: 4.0
+  embedder: model
+  temporal_window: 16
+  batch_crops: 8
+tracker:
+  high_thresh: 0.0
+  low_thresh: 0.0
+  max_animals: 2
+  max_lost: 5
+  n_init: 1

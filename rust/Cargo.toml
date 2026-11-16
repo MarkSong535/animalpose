@@ -1,0 +1,75 @@
+[package]
+name = "animalpose"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+repository = "https://github.com/animalpose/animalpose"
+description = "Rust port of animalpose: pose estimation, tracking and behavior for rodents"
+
+[lib]
+name = "animalpose"
+path = "src/lib.rs"
+
+[[bin]]
+name = "animalpose"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }  # cams.json floats read back exactly
+serde_yaml = "0.9"
+safetensors = "0.8"
+thiserror = "2"
+# Grayscale frames from image folders and `.npy` arrays; `zip`/`flate2` are the pure-Rust backends,
+# so the package still cross-compiles without a C library.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "bmp"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# The tensor core's fast paths: `matrixmultiply` is a pure-Rust SGEMM (convolutions run as
+# im2col + GEMM), `rayon` spreads the kernels over the cores. Neither needs a C toolchain.
+matrixmultiply = "0.3"
+rayon = "1.10"
+# `.tar.gz` downloads (`animalpose data download`); the pure-Rust `miniz_oxide` backend.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+# `--features mps`: inference on the GPU through Metal Performance Shaders graphs (macOS). Rust
+# bindings to the system frameworks; no C toolchain.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", optional = true }
+objc2-metal = { version = "0.3", optional = true }
+objc2-metal-performance-shaders = { version = "0.3", optional = true }
+objc2-metal-performance-shaders-graph = { version = "0.3", optional = true }
+
+# `--features gui`: the desktop app (`animalpose-gui`): egui for the window, nokhwa for USB cameras.
+eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow"] }
+nokhwa = { version = "0.10", optional = true, features = ["input-native"] }
+
+[features]
+gui = ["mps", "dep:eframe", "dep:nokhwa"]
+mps = [
+    "dep:objc2",
+    "dep:objc2-foundation",
+    "dep:objc2-metal",
+    "dep:objc2-metal-performance-shaders",
+    "dep:objc2-metal-performance-shaders-graph",
+]
+
+# Only for the tests: they read the torch fixtures written by `animalpose fixtures tensor`, and
+# `predict_e2e` writes the frames it infers on (the reader side lives in `src/data`).
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[[bin]]
+name = "animalpose-gui"
+path = "src/bin/animalpose-gui.rs"
+required-features = ["gui"]
+
+[[example]]
+name = "gpu_bench"
+required-features = ["mps"]
+
+[profile.release]
+opt-level = 3

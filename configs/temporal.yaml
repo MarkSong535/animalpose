@@ -1,0 +1,6 @@
+# Temporal LSTM on 2D image tracks (bidirectional = offline; false = causal/online, run on windows ending at the current frame).
+device: auto
+output: runs/temporal.pt
+model: {num_keypoints: 25, dims: 2, hidden: 256, layers: 2, bidirectional: true, dropout: 0.1, prior_bandwidth: 2.0, prior: hybrid}
+data: {window: 64, species: [mouse, rat]}
+train: {steps: 15000, batch_size: 32, lr: 2.0e-3, workers: 2, log_every: 100}

@@ -1,0 +1,24 @@
+# Inference pipeline (animalpose predict). Defaults point at the general checkpoints, which are the
+# ones this repository commits (weights/, git-lfs). Use runs/detector.pt, runs/pose.pt,
+# runs/temporal.pt and runs/behavior.pt for the synthetic-only set, or a recording's fine-tunes.
+device: auto
+checkpoints:
+  detector: weights/detector_general.pt
+  pose: weights/pose_general.pt  # ResNet-18, side-view aware
+  temporal: weights/temporal_general.pt  # optional, hybrid prior
+  behavior: weights/behavior_general.pt  # optional; 7 classes incl. "other"
+pipeline:
+  det_size: [256, 320]
+  det_thresh: 0.3
+  crop_size: 192
+  kp_conf_thresh: 0.3
+  embedder: model                  # model | color | none
+  pair_decoding: true              # keep left/right pairs on distinct heatmap peaks
+  pair_identity: true              # temporal Viterbi over left/right labels per track
+  pair_motion_frac: 0.1
+  temporal_window: 64
+tracker:
+  high_thresh: 0.5
+  low_thresh: 0.2
+  max_animals: null                # set to the cohort size (e.g. 2) to forbid new identities
+  max_lost: 90

@@ -1,0 +1,2323 @@
+[
+ {
+  "name": "walk",
+  "definition": "Ambulation across the substrate at normal speed (all four limbs stepping, body translating).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "ABODe (Camilleri 2024 IJCV)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "DeepEthogram (Bohnslav 2021)",
+   "Keypoint-MoSeq (Weinreb 2024)",
+   "B-SOiD (Hsu & Yttri 2021)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "walking",
+   "locomotion",
+   "locomote",
+   "ambulation",
+   "Move isolated (LMT)",
+   "Move in contact (LMT)",
+   "Walk Left/Right/Slowly (HCS)",
+   "Loco (ABODe)",
+   "General Locomotion / Search (Mouse Ethogram)"
+  ],
+  "detectable_top": "yes - centroid/tail-base velocity and gait from keypoints",
+  "detectable_side": "yes - body translation and limb stepping visible"
+ },
+ {
+  "name": "run",
+  "definition": "Fast locomotion / sprint, faster than normal walking.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Keypoint-MoSeq (Weinreb 2024)"
+  ],
+  "synonyms": [
+   "dart forward (Keypoint-MoSeq syllable)",
+   "fast locomotion"
+  ],
+  "detectable_top": "yes - speed threshold on body keypoints",
+  "detectable_side": "yes - speed and gait"
+ },
+ {
+  "name": "turn",
+  "definition": "Change of heading direction, in place or while moving.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "Keypoint-MoSeq (Weinreb 2024)",
+   "B-SOiD (Hsu & Yttri 2021)"
+  ],
+  "synonyms": [
+   "orient left/right (B-SOiD)",
+   "stationary turn (Keypoint-MoSeq)",
+   "Turn"
+  ],
+  "detectable_top": "yes - heading angle from nose-neck-tailbase",
+  "detectable_side": "partly - heading change in depth is ambiguous"
+ },
+ {
+  "name": "circling",
+  "definition": "Circling around own body axis or chasing own tail; when repetitive and invariant it is scored as a stereotypy.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "circle",
+   "Circle",
+   "Circling (stereotypy, Mouse Ethogram)",
+   "walk around (comparison table)"
+  ],
+  "detectable_top": "yes - cumulative heading rotation with small displacement",
+  "detectable_side": "partly - rotation axis partly out of plane"
+ },
+ {
+  "name": "jump",
+  "definition": "All four feet leave the ground in a single propulsive movement (non-repetitive).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "jumping",
+   "hop",
+   "hopping (Leach 2012, comparison table)"
+  ],
+  "detectable_top": "partly - only indirect (sudden displacement/body scale change) without height",
+  "detectable_side": "yes - vertical trajectory visible"
+ },
+ {
+  "name": "rear",
+  "definition": "Upright posture on hind legs with forelimbs off the ground (generic; split into supported/unsupported where needed).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "DeepEthogram (Bohnslav 2021)",
+   "B-SOiD (Hsu & Yttri 2021)",
+   "Keypoint-MoSeq (Weinreb 2024)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "ABODe (Camilleri 2024 IJCV)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "rearing",
+   "up (CRIM13)",
+   "Rear Up / Remain Rear Up (HCS)",
+   "Rear isolated / Rear in contact (LMT)",
+   "Search - Rearing (Mouse Ethogram)",
+   "upright / reconnoitering (comparison table)",
+   "rear-up in corner (Keypoint-MoSeq)",
+   "micro-motion includes rearing (ABODe)"
+  ],
+  "detectable_top": "partly - inferred from shortened projected body length and occluded hind keypoints",
+  "detectable_side": "yes - body height directly visible"
+ },
+ {
+  "name": "rear_supported",
+  "definition": "Rear with forepaws resting on a wall or object.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "Sturman 2020",
+   "Keypoint-MoSeq (Weinreb 2024)"
+  ],
+  "synonyms": [
+   "supported rear",
+   "wall rearing",
+   "rearing supported (EthoVision)",
+   "rear-up in corner"
+  ],
+  "detectable_top": "partly - rear cue plus nose/forepaws at wall (needs arena geometry)",
+  "detectable_side": "yes - forepaws on wall visible"
+ },
+ {
+  "name": "rear_unsupported",
+  "definition": "Rear in the open without forepaw support.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "Sturman 2020"
+  ],
+  "synonyms": [
+   "unsupported rear",
+   "free rear",
+   "rearing unsupported (EthoVision)"
+  ],
+  "detectable_top": "partly - rear cue away from walls (needs arena geometry)",
+  "detectable_side": "yes - upright posture without contact"
+ },
+ {
+  "name": "rear_white_mouse",
+  "definition": "Rearing performed by the intruder (white) mouse in the resident-intruder assay (CalMS21 Task 3 label 'White rearing').",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "CalMS21 Task3 (Sun 2021)"
+  ],
+  "synonyms": [
+   "White rearing",
+   "intruder rearing"
+  ],
+  "detectable_top": "partly - as for rear",
+  "detectable_side": "yes - as for rear"
+ },
+ {
+  "name": "partial_rear",
+  "definition": "Crouching on hind legs with the forebody partly raised but not fully upright; includes transitions into/out of rear.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)"
+  ],
+  "synonyms": [
+   "Partial Rear",
+   "Remain Partial Rear",
+   "Come Down from Partial Rear",
+   "Rear Up from Partial Rear",
+   "Come Down from Rear Up"
+  ],
+  "detectable_top": "partly - subtle body-length change",
+  "detectable_side": "yes - forebody elevation visible"
+ },
+ {
+  "name": "hang",
+  "definition": "Grasping cage-lid wire bars with fore- and/or hind-limbs with at least two limbs off the ground.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "hanging",
+   "Remain Hang Cuddled",
+   "Remain Hang Vertically (HCS)",
+   "On Bars (comparison table)"
+  ],
+  "detectable_top": "partly - only with lid geometry; body appears foreshortened",
+  "detectable_side": "yes - body off floor clearly visible"
+ },
+ {
+  "name": "climb",
+  "definition": "All feet off the floor on walls, objects or the food hopper (not hanging from the lid, not eating).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "ABODe (Camilleri 2024 IJCV)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Climbing (ABODe)",
+   "climbing"
+  ],
+  "detectable_top": "partly - needs object/wall geometry; height not observable",
+  "detectable_side": "yes - elevation visible"
+ },
+ {
+  "name": "stretch_body",
+  "definition": "Full-body comfort stretch (elongation of body, often with limb extension).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)"
+  ],
+  "synonyms": [
+   "Stretch Body",
+   "stretching"
+  ],
+  "detectable_top": "partly - body elongation without translation; confusable with SAP",
+  "detectable_side": "yes - elongation and limb extension visible"
+ },
+ {
+  "name": "remain_low",
+  "definition": "Remaining low and flattened against the cage floor.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)"
+  ],
+  "synonyms": [
+   "Remain Low"
+  ],
+  "detectable_top": "partly - body width/length ratio only",
+  "detectable_side": "yes - body height visible"
+ },
+ {
+  "name": "sit",
+  "definition": "Partial crouch with weight resting on the hind limbs, forebody slightly raised.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "sitting",
+   "sitting upright (comparison table)"
+  ],
+  "detectable_top": "partly - posture cues weak from above",
+  "detectable_side": "yes - posture visible"
+ },
+ {
+  "name": "stationary_alert",
+  "definition": "Awake but not moving through the cage (pause; still and alert, may move head).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "Pause",
+   "Stationary (HCS)",
+   "Stop isolated / Stop in contact (LMT)",
+   "Still and Alert (Mouse Ethogram)",
+   "Stand (Leach 2012)"
+  ],
+  "detectable_top": "yes - near-zero body velocity with head motion",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "micro_movement",
+  "definition": "Small movements of the head or limbs while staying in place (e.g., sniffing/looking around).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "ABODe (Camilleri 2024 IJCV)"
+  ],
+  "synonyms": [
+   "micro-movement",
+   "Micro-motion (uMove)"
+  ],
+  "detectable_top": "yes - low centroid velocity with keypoint jitter above noise",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "rest",
+  "definition": "Inactivity or near-complete stillness apart from breathing; may or may not be asleep.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "ABODe (Camilleri 2024 IJCV)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "resting",
+   "Immobile (ABODe)",
+   "rest",
+   "lie / lying down (Leach 2012)",
+   "inactive"
+  ],
+  "detectable_top": "yes - prolonged zero motion (separation from sleep/freeze needs context)",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "sleep",
+  "definition": "Sleeping: prolonged immobility in a curled/sleeping posture, usually in the nest.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Sleep",
+   "sleeping"
+  ],
+  "detectable_top": "partly - only as long immobility + curled shape; physiology not observable",
+  "detectable_side": "partly - same limitation"
+ },
+ {
+  "name": "awaken",
+  "definition": "Transition from sleep to wakefulness (first movements after a sleep bout).",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan (Academia Sinica TMC service page; secondary)"
+  ],
+  "synonyms": [
+   "awakening"
+  ],
+  "detectable_top": "partly - onset of motion after long immobility",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "twitch",
+  "definition": "Rapid localized movement/contraction of the body (e.g., back muscles), often during rest/sleep.",
+  "group": "locomotion_posture",
+  "social": false,
+  "sources": [
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "Twitch",
+   "twitching"
+  ],
+  "detectable_top": "partly - brief high-frequency keypoint displacement, near noise floor",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "sniff_environment",
+  "definition": "Undirected exploratory sniffing of floor, walls or air, with head movements and nose near the substrate.",
+  "group": "exploration_risk_assessment",
+  "social": false,
+  "sources": [
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "sniffing",
+   "Sniff (HCS)",
+   "Investigate - Undirected Sniffing (Mouse Ethogram)",
+   "Floor sniffing (LMT)",
+   "sniffing at rack/bottle/peat dust (comparison table)"
+  ],
+  "detectable_top": "partly - nose motion near floor; whisking/sniff cycle not resolvable",
+  "detectable_side": "partly - head lowered to floor visible"
+ },
+ {
+  "name": "explore_object",
+  "definition": "Investigating an object with nose directed at and within ~2 cm of it (novel object, toy).",
+  "group": "exploration_risk_assessment",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "exploreobject (MABe2025)",
+   "Investigate - Object (Mouse Ethogram)",
+   "object sniffing (LMT NOR events)",
+   "object exploration"
+  ],
+  "detectable_top": "yes - nose-to-object distance and heading (needs object location)",
+  "detectable_side": "yes - with object location"
+ },
+ {
+  "name": "attend",
+  "definition": "Orienting head/body toward a stimulus or conspecific while stationary.",
+  "group": "exploration_risk_assessment",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Attend",
+   "attention posture",
+   "staring at the observer (comparison table)"
+  ],
+  "detectable_top": "partly - head orientation toward target while still",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "stretched_attend_posture",
+  "definition": "Risk-assessment posture: body elongated forward toward a potential threat with hind feet stationary, often with reduced speed, followed by retraction.",
+  "group": "exploration_risk_assessment",
+  "social": false,
+  "sources": [
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "EPM ethological measures (vendor protocol + Sturman 2020)"
+  ],
+  "synonyms": [
+   "SAP",
+   "stretched attention posture",
+   "Investigate - Stretched Attend (Mouse Ethogram)",
+   "stretch-attend"
+  ],
+  "detectable_top": "yes - body elongation with stationary hind body (LMT detects from shape)",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "freeze",
+  "definition": "Complete absence of movement except respiration, in a tense crouched posture, typically in response to threat or conditioned cue.",
+  "group": "exploration_risk_assessment",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "freezing",
+   "Freeze"
+  ],
+  "detectable_top": "yes - zero keypoint motion over a duration threshold (vs rest needs context)",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "self_groom",
+  "definition": "Self-grooming (generic): forepaw strokes over face/head, licking or nibbling of fur, body or limbs.",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "HomeCageScan v3 ethogram (as listed in Leach 2012 PLoS ONE Table 5)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "ABODe (Camilleri 2024 IJCV)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "CalMS21 Task3 (Sun 2021)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "DeepEthogram (Bohnslav 2021)",
+   "Keypoint-MoSeq (Weinreb 2024)",
+   "AMBER maternal pipeline (Lapp 2023, via SimBA docs)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "groom",
+   "grooming",
+   "clean (CRIM13)",
+   "Self-Grooming (S-Grm, ABODe)",
+   "selfgroom (MABe2025)",
+   "Grooming (CalMS21 T3)",
+   "wash / washing (comparison table)",
+   "self-directed grooming (AMBER)"
+  ],
+  "detectable_top": "partly - stationary hunched shape with rhythmic nose/paw motion; paws often occluded",
+  "detectable_side": "yes - paw-to-face strokes visible"
+ },
+ {
+  "name": "face_groom",
+  "definition": "Forepaw strokes over the face/snout (paw/face groom phase of the grooming chain).",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "DeepEthogram (Bohnslav 2021)",
+   "B-SOiD (Hsu & Yttri 2021)",
+   "Keypoint-MoSeq (Weinreb 2024)"
+  ],
+  "synonyms": [
+   "face grooming",
+   "paw/face groom",
+   "face groom"
+  ],
+  "detectable_top": "partly - requires paw keypoints near nose",
+  "detectable_side": "yes - forepaw-nose contact visible"
+ },
+ {
+  "name": "head_groom",
+  "definition": "Larger bilateral forepaw strokes over the head and ears.",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "B-SOiD (Hsu & Yttri 2021)"
+  ],
+  "synonyms": [
+   "head groom"
+  ],
+  "detectable_top": "partly - requires paw keypoints near ears",
+  "detectable_side": "partly - side of head may be occluded"
+ },
+ {
+  "name": "body_groom",
+  "definition": "Licking/nibbling the flank, belly or back fur.",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "B-SOiD (Hsu & Yttri 2021)",
+   "Keypoint-MoSeq (Weinreb 2024)"
+  ],
+  "synonyms": [
+   "body grooming",
+   "body lick"
+  ],
+  "detectable_top": "partly - nose near torso with body curvature",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "genital_groom",
+  "definition": "Licking of own genital region (including post-copulatory genital grooming).",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "genitalgroom (MABe2025)",
+   "Post-Copulatory Groom",
+   "genital washing",
+   "licking the genitals"
+  ],
+  "detectable_top": "partly - nose near tail base with strong body curvature",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "scratch",
+  "definition": "Rapid rhythmic hind-limb scratching of head, neck or body; bouts are counted in itch assays.",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "DeepEthogram (Bohnslav 2021)",
+   "B-SOiD (Hsu & Yttri 2021)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "Shimada & LaMotte 2008 cheek model (via abstract/JoVE summary)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "scratching",
+   "itch (B-SOiD)",
+   "hind-limb scratching",
+   "scratch bouts"
+  ],
+  "detectable_top": "partly - only with hind-paw keypoints; fast motion needs high fps",
+  "detectable_side": "yes - hind limb motion visible"
+ },
+ {
+  "name": "body_shake",
+  "definition": "Rapid whole-body or fur shake (wet-dog-like shake).",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "shaking the fur",
+   "shaking",
+   "wet-dog shake"
+  ],
+  "detectable_top": "partly - high-frequency rotational jitter, needs high fps",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "defecate",
+  "definition": "Defecation; in video often scored when a new fecal bolus appears.",
+  "group": "maintenance",
+  "social": false,
+  "sources": [
+   "DeepEthogram (Bohnslav 2021)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "defecation",
+   "defecating"
+  ],
+  "detectable_top": "no - act not visible from keypoints (DeepEthogram notes it is inferred from new boli)",
+  "detectable_side": "no - same"
+ },
+ {
+  "name": "eat",
+  "definition": "Reaching for and consuming food from the hopper/bin or from food held in the forepaws.",
+  "group": "ingestive",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "ABODe (Camilleri 2024 IJCV)",
+   "HomeCageScan (Academia Sinica TMC service page; secondary)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "AMBER maternal pipeline (Lapp 2023, via SimBA docs)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "eating",
+   "feeding",
+   "Feed (ABODe)",
+   "gnawing food pellets (CRIM13)"
+  ],
+  "detectable_top": "partly - requires food location; head at hopper",
+  "detectable_side": "partly - needs food location; best from side (CRIM13 notes side view better)"
+ },
+ {
+  "name": "drink",
+  "definition": "Mouth juxtaposed to the water spout, licking.",
+  "group": "ingestive",
+  "social": false,
+  "sources": [
+   "Jhuang2010 (MIT home-cage)",
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)",
+   "ABODe (Camilleri 2024 IJCV)",
+   "HomeCageScan (Academia Sinica TMC service page; secondary)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "AMBER maternal pipeline (Lapp 2023, via SimBA docs)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "drinking",
+   "Drink",
+   "water point visit (LMT, event name not verified)"
+  ],
+  "detectable_top": "partly - requires spout location",
+  "detectable_side": "partly - requires spout location; side view better"
+ },
+ {
+  "name": "food_carry",
+  "definition": "Carrying food items in the mouth (e.g., hoarding).",
+  "group": "ingestive",
+  "social": false,
+  "sources": [
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "food carrying",
+   "hoarding"
+  ],
+  "detectable_top": "no - object in mouth not represented by body keypoints",
+  "detectable_side": "no"
+ },
+ {
+  "name": "food_share",
+  "definition": "Tolerating a conspecific feeding from the same source or taking dropped food from another (rat).",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "sharing food"
+  ],
+  "detectable_top": "partly - two animals co-located at food source",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "dig",
+  "definition": "Displacing bedding with forepaws and/or hind paws (generic digging).",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Keypoint-MoSeq (Weinreb 2024)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "Deacon 2006 Nat Protoc (digging/marble burying, nest building, burrowing; abstracts only)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "digging",
+   "dig (MABe2025)",
+   "stop and dig (Keypoint-MoSeq)"
+  ],
+  "detectable_top": "partly - rhythmic forepaw motion while stationary; bedding not tracked",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "push_dig",
+  "definition": "Pushing bedding forward with forepaws/head (shoveling-like digging).",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Push-dig",
+   "push dig",
+   "shoveling (possibly distinct in Mouse Ethogram)"
+  ],
+  "detectable_top": "partly - forward head/paw thrusts",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "kick_dig",
+  "definition": "Kicking bedding backward with the hind limbs.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "kick-dig",
+   "scrape-dig"
+  ],
+  "detectable_top": "partly - needs hind-paw keypoints",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "burrow",
+  "definition": "Removing substrate from a tube/burrow (burrowing test) or excavating a burrow.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Deacon 2006 Nat Protoc (digging/marble burying, nest building, burrowing; abstracts only)"
+  ],
+  "synonyms": [
+   "burrowing"
+  ],
+  "detectable_top": "partly - position in burrow tube plus digging motions",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "nest_build",
+  "definition": "Nest construction (generic): collecting, shredding and arranging nesting material.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Deacon 2006 Nat Protoc (digging/marble burying, nest building, burrowing; abstracts only)"
+  ],
+  "synonyms": [
+   "nesting",
+   "nest building"
+  ],
+  "detectable_top": "partly - only via location and repetitive handling; material not tracked",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "nest_material_carry",
+  "definition": "Carrying nesting material in the mouth.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Carrying"
+  ],
+  "detectable_top": "no - material not represented by keypoints",
+  "detectable_side": "no"
+ },
+ {
+  "name": "nest_material_fray",
+  "definition": "Shredding/fraying nesting material with teeth and forepaws.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Fraying",
+   "stripping"
+  ],
+  "detectable_top": "no - material not tracked",
+  "detectable_side": "no"
+ },
+ {
+  "name": "nest_material_pull_in",
+  "definition": "Pulling nesting material toward the nest.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Pulling in",
+   "hauling in"
+  ],
+  "detectable_top": "no - material not tracked",
+  "detectable_side": "no"
+ },
+ {
+  "name": "nest_material_sort",
+  "definition": "Arranging/sorting nest material with forepaws and mouth.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Sorting",
+   "arranging"
+  ],
+  "detectable_top": "no - material not tracked",
+  "detectable_side": "no"
+ },
+ {
+  "name": "nest_material_fluff",
+  "definition": "Fluffing nest material (loosening/raising the nest walls).",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Fluffing"
+  ],
+  "detectable_top": "no - material not tracked",
+  "detectable_side": "no"
+ },
+ {
+  "name": "bite_object",
+  "definition": "Biting or gnawing a non-food object or the cage.",
+  "group": "nest_burrow_object",
+  "social": false,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "biteobject (MABe2025)",
+   "gnawing at wall"
+  ],
+  "detectable_top": "partly - nose at object with little motion; contact not observable",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "marble_burying",
+  "definition": "Digging that buries glass marbles in bedding; scored as number of marbles buried.",
+  "group": "test_specific",
+  "social": false,
+  "sources": [
+   "Deacon 2006 Nat Protoc (digging/marble burying, nest building, burrowing; abstracts only)"
+  ],
+  "synonyms": [
+   "marble burying"
+  ],
+  "detectable_top": "partly - only digging near marbles; burial outcome needs object detection",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "approach",
+  "definition": "Moving toward another animal in a straight line without obvious exploration, reducing inter-animal distance.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "CalMS21 Task3 (Sun 2021)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "Approach",
+   "Social approach (LMT)",
+   "Approach contact / Approach rear (LMT)",
+   "direct approach (rat ethogram)",
+   "exploring approach"
+  ],
+  "detectable_top": "yes - decreasing distance plus heading toward other animal",
+  "detectable_side": "partly - depth ambiguity in distance"
+ },
+ {
+  "name": "sniff_conspecific",
+  "definition": "Close investigation: actively sniffing any part of another animal's body or tail (nose in contact/close, head bobbing).",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "MARS (Segalin 2021)",
+   "CalMS21 Task1/2 (Sun 2021)",
+   "LISBET (Chindemi; evaluated on CalMS21/CRIM13 labels)",
+   "A-SOiD (Tillmann 2024; CalMS21 labels, per abstract/search summary)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "close investigation",
+   "investigation",
+   "sniff",
+   "Investigate"
+  ],
+  "detectable_top": "yes - nose-to-body distance of two animals",
+  "detectable_side": "partly - occlusion between animals"
+ },
+ {
+  "name": "sniff_face",
+  "definition": "Nose of one animal in close contact with the nose or face of the other.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "MABe22 mouse triplets (Sun 2023)",
+   "CalMS21 Task3 (Sun 2021)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "face sniff",
+   "Sniff-face",
+   "sniffface",
+   "Oral-oral Contact (LMT)",
+   "Investigate - Facial",
+   "nose-to-nose",
+   "nose-touching / oral inspection (rat)"
+  ],
+  "detectable_top": "yes - nose-nose/nose-head distance",
+  "detectable_side": "partly - occlusion"
+ },
+ {
+  "name": "sniff_anogenital",
+  "definition": "Investigating the anogenital area of another animal, nose near tail base or under hindquarters.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "MABe22 mouse triplets (Sun 2023)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "SimBA mouse RI classifiers (SimBA docs)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "anogenital sniff",
+   "anal sniff",
+   "sniffgenital",
+   "Oral-genital Contact (LMT; also 'Passive oral-genital Contact' for receiver)",
+   "Investigate - Anogenital",
+   "nose-to-anogenital",
+   "inspecting anogenital region (rat)"
+  ],
+  "detectable_top": "yes - nose-to-tailbase distance",
+  "detectable_side": "partly - occlusion"
+ },
+ {
+  "name": "sniff_body",
+  "definition": "Sniffing the flank/trunk of another animal (not face, not anogenital).",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "sniffbody",
+   "Investigate - Body Trunk",
+   "body trunk exploring"
+  ],
+  "detectable_top": "yes - nose-to-trunk distance",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "reciprocal_sniff",
+  "definition": "Both animals simultaneously sniff each other (e.g., mutual face or face-anogenital).",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "reciprocalsniff"
+  ],
+  "detectable_top": "yes - both noses near each other's body",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "social_contact",
+  "definition": "Any body contact between two animals (generic contact state).",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "Contact (LMT)",
+   "Other contact (LMT)",
+   "Group2 (LMT)"
+  ],
+  "detectable_top": "yes - body outline/keypoint proximity (mask better)",
+  "detectable_side": "partly - depth ambiguity"
+ },
+ {
+  "name": "side_by_side",
+  "definition": "Two animals in contact side by side, heads in the same direction.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "Side by side Contact"
+  ],
+  "detectable_top": "yes - parallel headings with flank proximity",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "side_by_side_opposite",
+  "definition": "Two animals in contact side by side, heads in opposite directions.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "Side by side Contact, opposite way"
+  ],
+  "detectable_top": "yes - antiparallel headings with proximity",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "follow",
+  "definition": "One animal walks behind another along its path, maintaining short distance, without aggression.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "FollowZone (LMT)",
+   "Train2/Train3/Train4 (LMT, line of animals in contact)",
+   "follow",
+   "Sexual Pursuing (Mouse Ethogram)"
+  ],
+  "detectable_top": "yes - trajectory alignment and lag",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "move_away",
+  "definition": "Moving away from another animal in a straight line after or without contact (non-urgent withdrawal).",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "CalMS21 Task3 (Sun 2021)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "walk away (CRIM13)",
+   "Break contact / Get away / Escape contact / Social escape (LMT)",
+   "Disengaged (CalMS21 T3)",
+   "disengage (MABe2025)"
+  ],
+  "detectable_top": "yes - increasing distance with heading away",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "shepherd",
+  "definition": "MABe2025 pair label 'shepherd'; definition not found in sources read (presumably herding/steering another mouse).",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "shepherd"
+  ],
+  "detectable_top": "partly - uncertain definition; trajectory-based if herding",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "group_configuration",
+  "definition": "Configuration events in groups of 3-4: animals in mutual contact forming groups, or a group being made/broken.",
+  "group": "social_investigative",
+  "social": true,
+  "sources": [
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "Group3 / Group4",
+   "make group3 / break group3 / make group4 / break group4",
+   "Nest3 / Nest4"
+  ],
+  "detectable_top": "no - requires 3+ animals (not expressible with one or two animals)",
+  "detectable_side": "no - same"
+ },
+ {
+  "name": "huddle",
+  "definition": "Bodies in close contact and stationary for at least several seconds (may be resting/sleeping together).",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "MABe22 mouse triplets (Sun 2023)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "huddling",
+   "Huddling (LMT)",
+   "Group sleeping - Huddling / Dog Pile (Mouse Ethogram)",
+   "social rest"
+  ],
+  "detectable_top": "yes - sustained contact plus immobility",
+  "detectable_side": "partly - occlusion"
+ },
+ {
+  "name": "allogroom",
+  "definition": "Gently grooming (licking/nibbling) the fur of another animal.",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "ABODe (Camilleri 2024 IJCV)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "allogrooming",
+   "Allo-Grooming (A-Grm)",
+   "Allo-grooming - Normal",
+   "social grooming",
+   "groom (other)"
+  ],
+  "detectable_top": "partly - nose on partner's head/back with little locomotion",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "nosing",
+  "definition": "Gently pushing the flank or neck of another animal with the nose.",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Nosing",
+   "push under / push past (comparison table, approx.)"
+  ],
+  "detectable_top": "partly - nose-body contact with displacement",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "crawl_over_under",
+  "definition": "Crawling over or under another animal (context-dependent: sexual motivation in Mouse Ethogram, dominance/subordination in rat ethogram).",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "Crawl-Over",
+   "Crawl-Under",
+   "Push Past",
+   "crawling under / walking over (rat)"
+  ],
+  "detectable_top": "partly - keypoint overlap of two animals (identity swaps)",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "scent_mark",
+  "definition": "Rubbing flanks or pressing anogenital region on a surface, sometimes leaving urine.",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "scent marking",
+   "urine marking"
+  ],
+  "detectable_top": "no - urine/pressure not observable from keypoints",
+  "detectable_side": "partly - anogenital press posture"
+ },
+ {
+  "name": "pup_retrieval",
+  "definition": "Dam picks up a displaced pup in the mouth and carries it back to the nest.",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Maternal Moving - Pup Retrieval",
+   "retrieval"
+  ],
+  "detectable_top": "partly - needs pup tracking (pups not two-animal pose)",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "nursing",
+  "definition": "Dam over pups in nursing posture (high/low/partial kyphosis, prone, blanket, etc.).",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "AMBER maternal pipeline (Lapp 2023, via SimBA docs)"
+  ],
+  "synonyms": [
+   "Nursing (arched-back/high kyphosis, low kyphosis, partial kyphosis, prone, dog, bear, pig, split nursing)",
+   "active nursing / passive nursing (AMBER)"
+  ],
+  "detectable_top": "partly - dam location over nest; kyphosis needs side view",
+  "detectable_side": "partly - arched back visible"
+ },
+ {
+  "name": "pup_licking_grooming",
+  "definition": "Dam licks/grooms pups.",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "AMBER maternal pipeline (Lapp 2023, via SimBA docs)"
+  ],
+  "synonyms": [
+   "Maternal Grooming",
+   "licking/grooming (LG)"
+  ],
+  "detectable_top": "no - pups not resolved in keypoints",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "nest_attendance",
+  "definition": "Dam present in/over the nest with pups.",
+  "group": "social_affiliative",
+  "social": true,
+  "sources": [
+   "AMBER maternal pipeline (Lapp 2023, via SimBA docs)"
+  ],
+  "synonyms": [
+   "nest attendance"
+  ],
+  "detectable_top": "yes - location in nest region",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "mount",
+  "definition": "Animal hunched over another, usually from the rear, grasping its flanks with forelimbs, often with pelvic thrusting (includes copulatory mounting).",
+  "group": "social_sexual",
+  "social": true,
+  "sources": [
+   "MARS (Segalin 2021)",
+   "CalMS21 Task1/2 (Sun 2021)",
+   "LISBET (Chindemi; evaluated on CalMS21/CRIM13 labels)",
+   "A-SOiD (Tillmann 2024; CalMS21 labels, per abstract/search summary)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)"
+  ],
+  "synonyms": [
+   "mounting",
+   "Copulatory Mounting",
+   "copulation / coitus (CRIM13 umbrella label)",
+   "Mount"
+  ],
+  "detectable_top": "yes - body overlap aligned head-to-tail (identity swaps possible)",
+  "detectable_side": "yes - one animal atop the other"
+ },
+ {
+  "name": "attempted_mount",
+  "definition": "Mount attempt that does not result in a full mount/grasp.",
+  "group": "social_sexual",
+  "social": true,
+  "sources": [
+   "CalMS21 Task3 (Sun 2021)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Mount-attempt",
+   "attemptmount",
+   "attempted mount"
+  ],
+  "detectable_top": "yes - brief overlap from rear",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "intromission",
+  "definition": "Copulatory mount with slower pelvic thrusting and pauses (penile insertion; later-stage copulation).",
+  "group": "social_sexual",
+  "social": true,
+  "sources": [
+   "CalMS21 Task3 (Sun 2021)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "MARS (Segalin 2021)",
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Intromission",
+   "intromit",
+   "Copulation (Mouse Ethogram)"
+  ],
+  "detectable_top": "partly - mount plus thrust rhythm; insertion not visible",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "ejaculation",
+  "definition": "Ejaculatory mount: deep thrust followed by prolonged clasping and often falling to the side.",
+  "group": "social_sexual",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "ejaculate"
+  ],
+  "detectable_top": "partly - characteristic freeze/fall after mount",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "female_receptive_response",
+  "definition": "Female posture/response to male sexual exploring (e.g., lordosis, immobility while mounted).",
+  "group": "social_sexual",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Female Response",
+   "lordosis (term not explicitly confirmed in sources read)",
+   "creeping in front of partner / touching"
+  ],
+  "detectable_top": "partly - immobility under mount; spinal arch not visible from top",
+  "detectable_side": "partly - arched back visible"
+ },
+ {
+  "name": "sexual_motivation_display",
+  "definition": "Behaviors indicating sexual motivation (e.g., lying flat, falling over, crawling over/under partner).",
+  "group": "social_sexual",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Sexual Motivation",
+   "lying flat",
+   "falling over"
+  ],
+  "detectable_top": "partly",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "attack",
+  "definition": "High-intensity biting/tussling with another animal, including lunges and close pursuit between bites.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "MARS (Segalin 2021)",
+   "CalMS21 Task1/2 (Sun 2021)",
+   "LISBET (Chindemi; evaluated on CalMS21/CRIM13 labels)",
+   "A-SOiD (Tillmann 2024; CalMS21 labels, per abstract/search summary)",
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "SimBA mouse RI classifiers (SimBA docs)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Attack",
+   "aggression",
+   "biting/pulling fur (CRIM13)",
+   "leaping and biting (rat)"
+  ],
+  "detectable_top": "yes - high-velocity close contact (CalMS21/MARS baselines)",
+  "detectable_side": "partly - occlusion"
+ },
+ {
+  "name": "bite",
+  "definition": "Aggressive bite directed at another animal (ears, flanks, tail).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "Aggressive Bite",
+   "bite"
+  ],
+  "detectable_top": "partly - contact moment only; bite itself not visible",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "chase",
+  "definition": "Pursuit: one animal runs after another trying to keep close distance while the other moves fast.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "CRIM13 (Burgos-Artizzu 2012; ethogram as reproduced in Jiang et al. 2021 arXiv:2011.02451)",
+   "SimBA CRIM13 classifiers (SimBA docs)",
+   "MABe22 mouse triplets (Sun 2023)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram",
+   "Rat social play scoring (pinning/wrestling/nape attack/chasing; Frontiers Behav Neurosci 2023 PMC10435996; Pellis via search summaries)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)",
+   "SimBA mouse RI classifiers (SimBA docs)"
+  ],
+  "synonyms": [
+   "chasing",
+   "pursuit (SimBA)",
+   "longChase (LMT)",
+   "sexual pursuit when in sexual context"
+  ],
+  "detectable_top": "yes - both fast, follower behind leader",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "chase_attack",
+  "definition": "Chase immediately combined with biting/attack.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "chaseattack",
+   "chase-bite"
+  ],
+  "detectable_top": "yes - chase followed by contact",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "tussle",
+  "definition": "Fighting/wrestling: animals roll and tumble while biting, kicking, holding.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram",
+   "Rat social play scoring (pinning/wrestling/nape attack/chasing; Frontiers Behav Neurosci 2023 PMC10435996; Pellis via search summaries)"
+  ],
+  "synonyms": [
+   "fighting",
+   "wrestling",
+   "tussling",
+   "fight ball"
+  ],
+  "detectable_top": "partly - rapid overlapping keypoints; identity swaps",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "lateral_threat",
+  "definition": "Offensive sideways posture: arched back, flank presented toward opponent, often with sideways approach.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "SimBA mouse RI classifiers (SimBA docs)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Grant & Mackintosh 1963 (via secondary sources)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "lateral threat",
+   "Side Display",
+   "offensive sideways posture",
+   "sideways",
+   "threat posture (rat)"
+  ],
+  "detectable_top": "yes - perpendicular body orientation at short distance",
+  "detectable_side": "partly - arch visible, orientation less so"
+ },
+ {
+  "name": "offensive_upright",
+  "definition": "Offensive upright posture facing the opponent, leaning forward.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Grant & Mackintosh 1963 (via secondary sources)"
+  ],
+  "synonyms": [
+   "offensive upright",
+   "upright posture"
+  ],
+  "detectable_top": "partly - rear cue facing other animal",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "boxing",
+  "definition": "Both animals upright facing each other, striking with forepaws.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Boxing",
+   "Boxing Posture",
+   "fixing / dancing position (comparison table)"
+  ],
+  "detectable_top": "partly - mutual rear facing, close",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "threat_thrust",
+  "definition": "Threat movement: a quick forward thrust of the body/head toward an opponent without contact.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Thrust",
+   "threat"
+  ],
+  "detectable_top": "partly - sudden head displacement toward other animal",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "tail_rattle",
+  "definition": "Rapid lateral vibration of the tail, a threat/territorial display.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "SimBA mouse RI classifiers (SimBA docs)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Tail rattling",
+   "rattle"
+  ],
+  "detectable_top": "partly - needs multiple tail keypoints at high frame rate",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "zig_zag",
+  "definition": "Zig-zag/mincing locomotion around an opponent (threat display).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Zig-zag",
+   "mince / mincing",
+   "figure-of-eight"
+  ],
+  "detectable_top": "yes - trajectory shape near opponent",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "pin",
+  "definition": "One animal holds another down on its back/side (aggressive pin; in rat play: one rat on its back with the other standing over it).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Rat social play scoring (pinning/wrestling/nape attack/chasing; Frontiers Behav Neurosci 2023 PMC10435996; Pellis via search summaries)"
+  ],
+  "synonyms": [
+   "Pin",
+   "pinning",
+   "kicking (comparison table, approx.)"
+  ],
+  "detectable_top": "partly - overlap with one animal supine; supine not visible from top",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "nape_attack",
+  "definition": "Rat play: one animal pounces on/nuzzles the nape of the other, initiating a play bout.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Rat social play scoring (pinning/wrestling/nape attack/chasing; Frontiers Behav Neurosci 2023 PMC10435996; Pellis via search summaries)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "pounce",
+   "pouncing",
+   "play fighting (rat ethogram umbrella)"
+  ],
+  "detectable_top": "yes - nose to partner's neck with rapid approach",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "aggressive_groom",
+  "definition": "Vigorous allogrooming while pinning the partner down; partner squeaks/tries to escape.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "Allo-grooming - Vigorous",
+   "aggressive groom",
+   "dominancegroom (MABe2025; mapping inferred)"
+  ],
+  "detectable_top": "partly - allogroom with partner restrained",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "dominance_mount",
+  "definition": "Mounting directed at a same-sex conspecific without sexual intent (dominance).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "MARS (Segalin 2021)"
+  ],
+  "synonyms": [
+   "dominancemount",
+   "male-directed mounting (noted in MARS)"
+  ],
+  "detectable_top": "yes - as mount; context (sex) needed",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "dominance_display",
+  "definition": "MABe2025 pair label 'dominance'; definition not found in sources read.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "dominance"
+  ],
+  "detectable_top": "partly - definition uncertain",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "parry",
+  "definition": "Warding off an approaching/attacking opponent with forepaws or body.",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Parrying"
+  ],
+  "detectable_top": "partly - brief contact with defensive orientation",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "pushing_away",
+  "definition": "Pushing another animal with forepaws or flank to displace it.",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "push away"
+  ],
+  "detectable_top": "partly - contact with displacement of partner",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "passage_guarding",
+  "definition": "Dominant animal stands in a passage, blocking another's way (rat).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "passage guarding"
+  ],
+  "detectable_top": "partly - needs arena geometry",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "tooth_chatter",
+  "definition": "Teeth chattering while immobile, typically after detecting an opponent (rat).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "tooth-chattering"
+  ],
+  "detectable_top": "no - jaw movement not resolved",
+  "detectable_side": "no"
+ },
+ {
+  "name": "tail_quiver",
+  "definition": "Tail quivering, e.g., while crawling under or before copulation (rat; context-dependent).",
+  "group": "social_aggressive",
+  "social": true,
+  "sources": [
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "tail quivering"
+  ],
+  "detectable_top": "partly - tail keypoints, high fps",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "defensive_upright",
+  "definition": "Upright posture facing attacker, more vertical or leaning backward; includes immobile submissive upright.",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Grant & Mackintosh 1963 (via secondary sources)"
+  ],
+  "synonyms": [
+   "defensive upright",
+   "Submissive upright"
+  ],
+  "detectable_top": "partly - rear cue facing other animal",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "submit",
+  "definition": "Submissive posture: lying on back or side, immobile, in response to opponent.",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "submissive",
+   "on back",
+   "submission",
+   "full submissive posture",
+   "submissive posture (rat)"
+  ],
+  "detectable_top": "partly - immobility near opponent; supine not visible",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "defensive_crouch",
+  "definition": "Crouching low, immobile, near an opponent (incl. elevated crouch).",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Crouch",
+   "Elevated Crouch"
+  ],
+  "detectable_top": "partly - compact immobile body near opponent",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "defend",
+  "definition": "MABe2025 pair label 'defend'; defensive response to an attack (definition not published in sources read).",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)"
+  ],
+  "synonyms": [
+   "defend"
+  ],
+  "detectable_top": "partly - definition uncertain",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "flee",
+  "definition": "Rapid running away from an attacking/approaching animal.",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Mouse Ethogram comparison table (Grant & Mackintosh / Mackintosh 1981 / van Oortmerssen 1971 / van Abeelen 1963; per-column attribution uncertain)"
+  ],
+  "synonyms": [
+   "Fleeing",
+   "escape (MABe2025)",
+   "flee",
+   "retreat",
+   "evade",
+   "withdrawal"
+  ],
+  "detectable_top": "yes - high speed away from other animal",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "avoid",
+  "definition": "Changing route/keeping away upon detecting another animal, without contact.",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "SimBA rat RI classifiers (SimBA docs)",
+   "Schweinfurth 2020 eLife wild-rat social ethogram"
+  ],
+  "synonyms": [
+   "avoidance",
+   "avoiding",
+   "avoid"
+  ],
+  "detectable_top": "yes - path deviation/distance increase",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "flinch",
+  "definition": "Brief whole-body jerk/startle (e.g., when contacted by another mouse); in pain ethograms a small whole-body movement.",
+  "group": "social_defensive",
+  "social": true,
+  "sources": [
+   "MABe2025 Kaggle label list (via yu4u slide deck; secondary, definitions not published in sources read)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "flinch"
+  ],
+  "detectable_top": "partly - brief high-acceleration jitter",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "head_dip",
+  "definition": "EPM: head and shoulders lowered over the edge of an open arm (protected if body in closed arm/centre).",
+  "group": "test_specific",
+  "social": false,
+  "sources": [
+   "Sturman 2020",
+   "EPM ethological measures (vendor protocol + Sturman 2020)",
+   "EthoVision XT Rat Behavior Recognition (Noldus)"
+  ],
+  "synonyms": [
+   "head dipping",
+   "protected head dip",
+   "unprotected head dip"
+  ],
+  "detectable_top": "yes - nose beyond arm edge (needs maze geometry; DLC-based in Sturman 2020)",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "immobility_despair",
+  "definition": "FST/TST: floating or hanging with only movements necessary to keep the head above water / no escape-directed movement.",
+  "group": "test_specific",
+  "social": false,
+  "sources": [
+   "Sturman 2020",
+   "FST modified scoring (Detke et al. 1995 / Cryan et al. 2002; via secondary sources)",
+   "EthoVision XT activity module for FST floating (per Sturman 2020)"
+  ],
+  "synonyms": [
+   "floating",
+   "immobility",
+   "tail-suspension immobility"
+  ],
+  "detectable_top": "yes - low keypoint motion (Sturman 2020 classifier)",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "swimming_fst",
+  "definition": "FST: active horizontal swimming movements around the cylinder.",
+  "group": "test_specific",
+  "social": false,
+  "sources": [
+   "FST modified scoring (Detke et al. 1995 / Cryan et al. 2002; via secondary sources)"
+  ],
+  "synonyms": [
+   "swimming"
+  ],
+  "detectable_top": "yes - horizontal movement in cylinder",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "climbing_fst",
+  "definition": "FST: vigorous upward-directed forepaw movements against the cylinder wall.",
+  "group": "test_specific",
+  "social": false,
+  "sources": [
+   "FST modified scoring (Detke et al. 1995 / Cryan et al. 2002; via secondary sources)"
+  ],
+  "synonyms": [
+   "climbing",
+   "struggling (term used by some labs; not confirmed in sources read)"
+  ],
+  "detectable_top": "partly - forepaw keypoints at wall",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "paw_lick_bite",
+  "definition": "Licking or biting an injected/injured paw or wound (nocifensive).",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Formalin test nocifensive scoring (via Wikipedia/protocol summaries)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)",
+   "DeepEthogram (Bohnslav 2021)"
+  ],
+  "synonyms": [
+   "licking",
+   "lick (DeepEthogram Mouse-Ventral2)",
+   "wound lick",
+   "biting the injected paw"
+  ],
+  "detectable_top": "partly - nose near paw keypoint",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "paw_flinch",
+  "definition": "Rapid flinching/shaking of an injected paw (main formalin response in rats).",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Formalin test nocifensive scoring (via Wikipedia/protocol summaries)"
+  ],
+  "synonyms": [
+   "flinching",
+   "shaking",
+   "paw shake"
+  ],
+  "detectable_top": "partly - needs paw keypoints and high fps",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "paw_guarding",
+  "definition": "Favoring or lifting an injured limb off the floor.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Formalin test nocifensive scoring (via Wikipedia/protocol summaries)",
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "favoring",
+   "lifting",
+   "rear leg lift (Leach 2012)",
+   "guarding"
+  ],
+  "detectable_top": "partly - paw keypoints/weight not observable from top",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "forelimb_wipe",
+  "definition": "Unilateral forelimb wiping of the face/cheek (pain indicator in cheek model); repetitive wiping is also a listed stereotypy.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Shimada & LaMotte 2008 cheek model (via abstract/JoVE summary)",
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "wiping",
+   "cheek wiping",
+   "Wiping (stereotypy)"
+  ],
+  "detectable_top": "partly - forepaw-to-cheek motion, one forelimb",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "writhe",
+  "definition": "Contortion/stretching of abdominal muscles (visceral pain).",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "writhing"
+  ],
+  "detectable_top": "partly - body elongation with flank contraction",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "abdominal_press",
+  "definition": "Pressing the abdomen toward the cage floor.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "press"
+  ],
+  "detectable_top": "partly",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "back_arch",
+  "definition": "Arching of the back (hunched posture), a pain indicator.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "arch",
+   "hunched"
+  ],
+  "detectable_top": "partly - compact body length only",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "stagger",
+  "definition": "Partial loss of balance when walking.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "staggering",
+   "ataxic gait"
+  ],
+  "detectable_top": "partly - lateral trajectory deviations",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "wobble",
+  "definition": "Slight side-to-side swaying movement.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Leach 2012 PLoS ONE post-vasectomy pain ethogram (Table 4)"
+  ],
+  "synonyms": [
+   "wobble"
+  ],
+  "detectable_top": "partly",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "barbering",
+  "definition": "Plucking/trimming fur or whiskers of cage mates (or self).",
+  "group": "pathological_clinical",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Barbering",
+   "whisker trimming"
+  ],
+  "detectable_top": "partly - allogroom-like contact; hair removal not visible",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "bar_mouthing",
+  "definition": "Stereotypic repetitive mouthing/gnawing of cage bars.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Bar-mouthing",
+   "bar biting"
+  ],
+  "detectable_top": "partly - repetitive head position at lid",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "stereotypic_jumping",
+  "definition": "Repetitive invariant jumping, often in a corner or against walls.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)",
+   "LiveMouseTracker (de Chaumont 2019; lmt-analysis code)"
+  ],
+  "synonyms": [
+   "Jumping (stereotypy)",
+   "WallJump (LMT)"
+  ],
+  "detectable_top": "partly - repeated displacement at wall; height not observed",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "looping",
+  "definition": "Stereotypic backflips/looping over the cage.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Looping",
+   "backflipping"
+  ],
+  "detectable_top": "partly",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "route_tracing",
+  "definition": "Stereotypic repetitive locomotion along a fixed route.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Route Tracing",
+   "pacing"
+  ],
+  "detectable_top": "yes - repeated trajectory pattern",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "twirling",
+  "definition": "Stereotypic rapid spinning in place.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Twirling"
+  ],
+  "detectable_top": "yes - rapid rotation in place",
+  "detectable_side": "partly"
+ },
+ {
+  "name": "infanticide",
+  "definition": "Killing of pups.",
+  "group": "pathological_clinical",
+  "social": true,
+  "sources": [
+   "Stanford Mouse Ethogram index (Garner lab)"
+  ],
+  "synonyms": [
+   "Infanticide"
+  ],
+  "detectable_top": "no - pups not tracked; outcome not visible from adult keypoints",
+  "detectable_side": "no"
+ },
+ {
+  "name": "seizure_facial_automatism",
+  "definition": "Racine stage 1: mouth and facial movements / immobility.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Racine 1972 seizure stages (via Wikipedia and modified-scale summaries)"
+  ],
+  "synonyms": [
+   "Racine stage 1",
+   "facial movement",
+   "mouth clonus"
+  ],
+  "detectable_top": "no - facial movements not captured by body keypoints",
+  "detectable_side": "partly - with face keypoints"
+ },
+ {
+  "name": "seizure_head_nodding",
+  "definition": "Racine stage 2: head nodding (some modified scales add forelimb clonus).",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Racine 1972 seizure stages (via Wikipedia and modified-scale summaries)"
+  ],
+  "synonyms": [
+   "Racine stage 2",
+   "head bobbing"
+  ],
+  "detectable_top": "partly - rhythmic head keypoint oscillation",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "seizure_forelimb_clonus",
+  "definition": "Racine stage 3: unilateral/bilateral forelimb clonus.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Racine 1972 seizure stages (via Wikipedia and modified-scale summaries)"
+  ],
+  "synonyms": [
+   "Racine stage 3",
+   "clonus"
+  ],
+  "detectable_top": "partly - needs forepaw keypoints",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "seizure_rearing_falling",
+  "definition": "Racine stages 4-5: rearing with clonus, then falling/loss of postural control.",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Racine 1972 seizure stages (via Wikipedia and modified-scale summaries)"
+  ],
+  "synonyms": [
+   "Racine stage 4",
+   "Racine stage 5",
+   "rearing and falling"
+  ],
+  "detectable_top": "partly - fall is a sudden posture change",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "seizure_generalized_tonic_clonic",
+  "definition": "Extended Racine stages: generalized tonic-clonic seizure, hind-limb extension, wild running/jumping (definitions vary between modified scales).",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Racine 1972 seizure stages (via Wikipedia and modified-scale summaries)"
+  ],
+  "synonyms": [
+   "stage 6 (varies)",
+   "tonic-clonic",
+   "hind-limb extension",
+   "wild running (uncertain)"
+  ],
+  "detectable_top": "partly - violent motion then rigid immobility",
+  "detectable_side": "yes"
+ },
+ {
+  "name": "head_twitch",
+  "definition": "Head-twitch response: rapid rotational head shake (5-HT2A agonist/psychedelic assay).",
+  "group": "pathological_clinical",
+  "social": false,
+  "sources": [
+   "Head-twitch response automation (ACS Pharmacol Transl Sci 2025, title/abstract only; uncertain)"
+  ],
+  "synonyms": [
+   "HTR",
+   "head twitch response"
+  ],
+  "detectable_top": "partly - very fast head keypoint motion; needs high fps",
+  "detectable_side": "partly"
+ }
+]

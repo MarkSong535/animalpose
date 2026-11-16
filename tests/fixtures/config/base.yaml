@@ -1,0 +1,7 @@
+train:
+  steps: 10
+  seed: 0
+data:
+  species: [mouse]
+tracker:
+  max_animals: 2

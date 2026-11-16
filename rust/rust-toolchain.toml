@@ -1,0 +1,9 @@
+# Pinned toolchain for the Rust workspace: local and CI builds agree on one
+# version, so `cargo fmt` and `cargo clippy -D warnings` behave the same for
+# everyone. If this exact version is unavailable on a runner, CI falls back to
+# the runner's `stable` toolchain (see .github/workflows/ci.yml), which may
+# report formatting or lint differences until the pin is bumped.
+[toolchain]
+channel = "1.88.0"
+components = ["rustfmt", "clippy"]
+targets = []
