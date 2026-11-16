@@ -289,7 +289,7 @@ fn dlt_calibration_and_pnp_recover_the_camera() {
     close(&m3(&est.k), &flat(&c["K"]), 1e-8, 1e-8, "K");
     close(&m3(&est.r), &flat(&c["R"]), 1e-8, 1e-10, "R");
     close(&est.t, &flat(&c["t"]), 1e-8, 1e-8, "t");
-    let err = reprojection_errors(std::slice::from_ref(&est), &x3, &[x2.clone()]);
+    let err = reprojection_errors(std::slice::from_ref(&est), &x3, std::slice::from_ref(&x2));
     close(&err[0], &flat(&c["err"]), 1e-7, 1e-9, "reprojection error");
     // Exact correspondences: the camera itself.
     let exact: Vec<[f64; 2]> = x3.iter().map(|p| cams[2].project(p)).collect();
