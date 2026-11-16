@@ -954,7 +954,10 @@ mod tests {
         let parts: Vec<usize> = array_split(10, 4).iter().map(|r| r.len()).collect();
         assert_eq!(parts, [3, 3, 2, 2]);
         assert_eq!(crc32(b"session_a/frame.png"), 0x8d13_719a);
-        assert_eq!(py_path(Path::new("./a/b/")), "a/b");
+        assert_eq!(
+            py_path(Path::new("./a/b/")),
+            format!("a{}b", std::path::MAIN_SEPARATOR)
+        );
     }
 
     #[test]

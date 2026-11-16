@@ -1234,13 +1234,48 @@ fn tracker_config(cfg: &Config) -> TrackerConfig {
     out
 }
 
+pub(crate) const DEFAULT_PIPELINE_CONFIG: &str = "configs/pipeline.yaml";
+
+/// Locate the model bundle for an installed binary or use the checkout's default.
+pub(crate) fn default_pipeline_config() -> PathBuf {
+    let local = PathBuf::from(DEFAULT_PIPELINE_CONFIG);
+    if local.is_file() {
+        return local;
+    }
+    let bundle = std::env::home_dir().map(|home| home.join(".animalpose"));
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    [exe_dir, bundle]
+        .into_iter()
+        .flatten()
+        .map(|root| root.join(DEFAULT_PIPELINE_CONFIG))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| repo_path(DEFAULT_PIPELINE_CONFIG))
+}
+
+fn checkpoint_path(cfg: &Config, path: &str) -> PathBuf {
+    let file = repo_path(path);
+    if Path::new(path).is_absolute() || Path::new(path).is_file() {
+        return file;
+    }
+    // Release model bundles preserve the repository layout (configs/ and weights/ as siblings).
+    cfg.source()
+        .and_then(|source| Path::new(source).parent())
+        .filter(|dir| dir.ends_with("configs"))
+        .and_then(Path::parent)
+        .map(|root| root.join(path))
+        .filter(|path| path.is_file())
+        .unwrap_or(file)
+}
+
 /// Loads one checkpoint and checks the network kind it holds.
 fn load_net(cfg: &Config, key: &str, kind: ModelKind) -> Result<Net> {
     let path = cfg
         .get(key)
         .and_then(|v| v.as_str())
         .with_context(|| format!("`{key}` is missing from the config"))?;
-    let file = repo_path(path);
+    let file = checkpoint_path(cfg, path);
     let (got_cfg, got_kind, weights) =
         crate::models::load(&file).with_context(|| format!("cannot read {path}"))?;
     if got_kind != kind {

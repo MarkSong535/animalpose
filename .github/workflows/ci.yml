@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: ['**']
   pull_request:
 
 permissions:
@@ -19,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -27,11 +30,11 @@ jobs:
       - name: Install (CPU-only torch)
         run: |
           python -m pip install --upgrade pip
-          pip install torch --index-url "$TORCH_INDEX"
-          pip install -e ".[dev]" ruff==0.17.3
+          pip install torch torchvision --index-url "$TORCH_INDEX"
+          pip install -e ".[dev]" safetensors ruff==0.17.3
       - uses: ./.github/actions/setup-ffmpeg
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests scripts/package_release.py
       - name: Test with coverage
         run: bash scripts/coverage.sh
       - name: Upload coverage to Codecov
@@ -53,6 +56,8 @@ jobs:
         python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -89,11 +94,13 @@ jobs:
           - name: windows-x86_64
             runs-on: windows-latest
           - name: macos-x86_64
-            runs-on: macos-26-intel
+            runs-on: macos-15-intel
           - name: macos-aarch64
             runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-ffmpeg
       - name: Install Rust toolchain
         run: rustup toolchain install stable --component rustfmt --component clippy
@@ -128,6 +135,8 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-ffmpeg
       - name: Install Rust toolchain
         run: rustup toolchain install stable --component clippy
@@ -152,6 +161,8 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-ffmpeg
       - name: Install Rust toolchain
         run: rustup toolchain install stable --component llvm-tools-preview
@@ -165,7 +176,8 @@ jobs:
           restore-keys: cargo-llvm-cov-
       - name: Test with coverage
         run: |
-          cargo llvm-cov --workspace --all-targets --ignore-run-fail \
+          mkdir -p coverage
+          cargo llvm-cov --workspace --all-targets \
             --codecov --output-path coverage/codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

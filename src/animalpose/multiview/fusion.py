@@ -111,6 +111,8 @@ def triangulate_identities(tracks: list[ViewTrack], cameras: list[Camera], ids: 
     first makes bilateral labels epipolar-consistent across views
     (:mod:`animalpose.multiview.symmetry`); robust triangulation already rejects a
     single swapped view, so this mainly matters for two-camera rigs."""
+    if not tracks:
+        return {}
     k = tracks[0].keypoints.shape[1]
     v = len(cameras)
     out = {}

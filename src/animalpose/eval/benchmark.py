@@ -171,9 +171,10 @@ def eval_multiview(pipe: PosePipeline, temporal3d=None, frames: int = 150, n_ani
         coverage.append(np.isfinite(d).mean())
         if "smoothed3d" in animals[gids[j]]:
             errs_s.append(np.linalg.norm(animals[gids[j]]["smoothed3d"] - sim.kpts3d[a], axis=-1).ravel())
-    e = np.concatenate(errs_raw)
-    out.update({"mpjpe_cm": float(e.mean()), "median_error_cm": float(np.median(e)),
-                "triangulated_fraction": float(np.mean(coverage)),
+    e = np.concatenate(errs_raw) if errs_raw else np.empty(0)
+    out.update({"mpjpe_cm": float(e.mean()) if e.size else None,
+                "median_error_cm": float(np.median(e)) if e.size else None,
+                "triangulated_fraction": float(np.mean(coverage)) if coverage else 0.0,
                 "body_length_cm": float(np.mean([ap.size for ap in sim.appearance]))})
     if errs_s:
         out["mpjpe_smoothed_all_frames_cm"] = float(np.concatenate(errs_s).mean())

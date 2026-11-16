@@ -330,10 +330,7 @@ mod tests {
             source_id("cage_a"),
             format!("{:08x}_cage_a", crc32(b"cage_a"))
         );
-        assert_eq!(
-            source_id("sub dir/my video.v2.mp4"),
-            format!("{:08x}_myvideo_v2", crc32(b"sub dir/my video.v2.mp4"))
-        );
+        assert_eq!(source_id("sub dir/my video.v2.mp4"), "720c9a51_my_video_v2");
         assert_eq!(source_id("."), format!("{:08x}_", crc32(b".")));
         let long = "a".repeat(50) + ".avi";
         assert_eq!(

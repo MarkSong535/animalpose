@@ -93,7 +93,7 @@ def test_a_missing_checkpoint_is_a_one_line_error(capsys):
     code = main(["label", "--root", "data/raw/videos", "--detector", "runs/nope.pt",
                  "--per-source", "1", "--quiet", "--out", "outputs/_pytest_labels"])
     assert code == 1
-    assert capsys.readouterr().err == "error: no checkpoint at runs/nope.pt\n"
+    assert capsys.readouterr().err == f"error: no checkpoint at {Path('runs/nope.pt')}\n"
 
 
 def test_add_group_rejects_a_leaf_flag_named_run(tmp_path):

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "Species-agnostic multi-animal pose estimation, tracking, behavior and multi-view 3D for rodents and beyond"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 dependencies = [
   "torch>=2.2",
   "numpy>=1.24",
@@ -26,8 +27,7 @@ plot = ["matplotlib>=3.7"]  # `animalpose behavior plot`
 export = ["onnx>=1.15", "onnxruntime>=1.17", "onnxscript>=0.1"]
 torchvision = ["torchvision>=0.17"]
 real = ["pandas>=2.0", "tables>=3.8"]  # real-dataset converters and DeepLabCut .h5 tracks
-# What CI installs: every package the suite imports except torchvision, whose encoder tests
-# skip when it is absent.
+# Base test dependencies. The coverage job also installs torchvision and safetensors.
 dev = [
   "pytest>=7",
   "pytest-cov>=4",

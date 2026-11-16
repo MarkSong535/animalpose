@@ -365,7 +365,8 @@ def test_label_keeps_only_the_frames_it_can_defend(lab, tmp_path):
         x, y, w, h = ann["bbox"]
         assert 0 <= x and 0 <= y and w > 0 and h > 0
     split = json.loads((out / "split.json").read_text())
-    assert split["train"] == ["caicai/cage.mp4", "caicai/cage2.mp4"] and split["held_out"] == []
+    assert split["train"] == [str(Path("caicai") / name) for name in ("cage.mp4", "cage2.mp4")]
+    assert split["held_out"] == []
 
     kept = api.label(raw, out=tmp_path / "filtered", per_source=4, include=["cage2"], **teacher)
     assert kept["sources"] == 1 and kept["frames"] == 4

@@ -10,6 +10,20 @@ cargo build --release
 cargo test --release
 ```
 
+## Release downloads
+
+The **Release** workflow in GitHub Actions builds separate `animalpose` and `animalpose-gui`
+downloads. Linux x86-64 and ARM64 have `.deb`, `.rpm`, and `.tar.gz` packages. macOS Intel and
+Apple Silicon have a CLI `.tar.gz` and an ad-hoc signed desktop `.dmg`. Windows x86-64 has two
+standalone `.exe` files. The workflow also builds the Python wheel and source archive.
+
+Extract `animalpose-models-v<version>.zip` into `~/.animalpose` (`%USERPROFILE%\.animalpose` on
+Windows), with `configs/` and `weights/` at the top level. Portable executables also look for those
+folders beside the binary. Install `ffmpeg` and `ffprobe` to open or record videos.
+
+Run **Actions → Release → Run workflow** to build downloadable artifacts. Push a matching tag
+such as `v0.1.0` to publish the packages and checksums to GitHub Releases.
+
 ## Commands
 
 | Command | What it does |
@@ -32,7 +46,8 @@ cargo run --release --features gui --bin animalpose-gui
 
 1. Tick one or more cameras, or type a video file path, then press **Start**. Each view shows live
    skeletons and track IDs.
-2. Press **Record** / **Stop recording**. Each camera is saved as `recordings/rec-<time>/cam<i>.mp4`.
+2. Press **Record** / **Stop recording**. By default, each camera is saved under
+   `~/AnimalPose/recordings/rec-<time>/cam<i>.mp4`.
 3. Press **Analyze last recording**. This runs the full pipeline (temporal model and behavior
    included) into `<recording>/analysis/`. With several cameras plus a `cameras.json` from
    `animalpose data calibrate`, it runs in 3D.
@@ -89,7 +104,8 @@ command to use.
 
 ## Toolchain
 
-`rust-toolchain.toml` pins 1.88.0; `rust-version` is 1.77. CI builds and tests on Linux (x86-64,
-arm64), Windows and macOS (x86-64, arm64), and enforces `cargo fmt` and `cargo clippy -D warnings`.
+`rust-toolchain.toml` pins 1.88.0 for local builds. CI uses stable Rust on Linux (x86-64, arm64),
+Windows and macOS (x86-64, arm64), and enforces `cargo fmt` and `cargo clippy -D warnings`.
+Use `git lfs pull` at the repository root to fetch the test fixtures and general checkpoints.
 
-MIT, see [LICENSE](../LICENSE).
+GPL-3.0-only. See [LICENSE](../LICENSE).

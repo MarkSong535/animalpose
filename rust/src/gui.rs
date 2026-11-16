@@ -21,7 +21,7 @@ use eframe::egui;
 
 use crate::algos::image::Bgr;
 use crate::cli::overlay::draw_pose;
-use crate::cli::predict::{LiveAnimal, LiveTracker, Pipeline};
+use crate::cli::predict::{default_pipeline_config, LiveAnimal, LiveTracker, Pipeline};
 use crate::data::config::Config;
 use crate::data::video::{VideoReader, VideoWriter};
 
@@ -356,12 +356,15 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         let sources = list_cameras();
+        let recordings = std::env::home_dir()
+            .map(|home| home.join("AnimalPose").join("recordings"))
+            .unwrap_or_else(|| "recordings".into());
         Self {
             selected: vec![false; sources.len()],
             sources,
             file: String::new(),
-            config: "configs/pipeline.yaml".into(),
-            out_dir: "recordings".into(),
+            config: default_pipeline_config().to_string_lossy().into_owned(),
+            out_dir: recordings.to_string_lossy().into_owned(),
             cameras_json: String::new(),
             live: true,
             workers: Vec::new(),

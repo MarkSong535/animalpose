@@ -1,0 +1,209 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify package metadata and tag
+        id: version
+        shell: bash
+        run: |
+          version=$(python3 scripts/package_release.py version)
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Expected tag v$version, got $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  native:
+    name: Native packages (${{ matrix.target }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-22.04
+          - target: linux-aarch64
+            os: ubuntu-22.04-arm
+          - target: macos-x86_64
+            os: macos-15-intel
+          - target: macos-aarch64
+            os: macos-15
+          - target: windows-x86_64
+            os: windows-2022
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ./.github/actions/setup-ffmpeg
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang libclang-dev pkg-config libgl1-mesa-dev \
+            libwayland-dev libxkbcommon-dev file nasm rpm xvfb xauth libgl1-mesa-dri
+      - name: Install the JPEG assembler (Intel macOS)
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        run: command -v nasm || brew install nasm
+      - name: Install the JPEG assembler (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (-not (Get-Command nasm -ErrorAction SilentlyContinue)) {
+            choco install nasm -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            "$env:ProgramFiles\NASM" >> $env:GITHUB_PATH
+          }
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Test and compile the headless and desktop binaries
+        working-directory: rust
+        shell: bash
+        run: |
+          cargo test --locked --release --features gui
+          cargo build --locked --release --features gui --bin animalpose-gui
+          cargo build --locked --release --no-default-features --bin animalpose
+      - name: Package the executables
+        run: python scripts/package_release.py native --out dist/native
+      - name: Test an installed Linux package and launch the desktop app
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get install -y ./dist/native/*.deb
+          animalpose --version
+          status=0
+          timeout 10s xvfb-run -a animalpose-gui || status=$?
+          test "$status" -eq 124
+      - name: Test RPM installation on Fedora
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD/dist/native:/packages:ro" fedora:44 bash -ec '
+            dnf install -y /packages/*.rpm
+            animalpose --version
+            test -x /usr/bin/animalpose-gui
+          '
+      - name: Verify prediction with the packaged models
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          EXE_SUFFIX: ${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: |
+          smoke=$(mktemp -d)
+          python scripts/package_release.py models --out "$smoke"
+          python -m zipfile -e "$smoke/animalpose-models-v$VERSION.zip" "$smoke"
+          cp "rust/target/release/animalpose$EXE_SUFFIX" "$smoke/"
+          cd "$smoke"
+          mkdir work
+          cd work
+          "../animalpose$EXE_SUFFIX" predict --synthetic --max-frames 2 --out result
+          test -s result/tracks.csv
+          test -s result/overlay.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animalpose-${{ matrix.target }}
+          path: dist/native/*
+          if-no-files-found: error
+
+  python:
+    name: Python wheel and source distribution
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Build and verify Python distributions
+        run: |
+          python -m pip install build twine
+          python -m build --outdir dist/python
+          python -m twine check --strict dist/python/*
+      - name: Install and test the wheel
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install dist/python/*.whl
+          cd "$RUNNER_TEMP"
+          animalpose --help
+          python -c 'from importlib.resources import files; assert files("animalpose.behavior").joinpath("behaviors.json").is_file()'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animalpose-python
+          path: dist/python/*
+          if-no-files-found: error
+
+  models:
+    name: Shared models, configs and license
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - run: |
+          python3 scripts/package_release.py models --out dist/models
+          cp LICENSE dist/models/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animalpose-models
+          path: dist/models/*
+          if-no-files-found: error
+
+  publish:
+    name: Verify assets and publish tagged release
+    needs: [version, native, python, models]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: animalpose-*
+          merge-multiple: true
+          path: release-assets
+      - name: Generate SHA-256 checksums
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: release-assets/SHA256SUMS
+          if-no-files-found: error
+      - name: Publish this tag
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! draft=$(gh release view "$TAG" --json isDraft --jq .isDraft); then
+            gh release create "$TAG" --verify-tag --draft --generate-notes
+            draft=true
+          fi
+          if [[ "$draft" == true ]]; then
+            gh release upload "$TAG" release-assets/* --clobber
+            gh release edit "$TAG" --draft=false
+          fi

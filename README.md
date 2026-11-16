@@ -123,4 +123,4 @@ cd rust && cargo test        # Rust suite
 
 ## License
 
-MIT. Datasets and pretrained weights you download carry their own licenses, some non-commercial.
+GPL-3.0-only. Datasets and pretrained weights you download carry their own licenses, some non-commercial.

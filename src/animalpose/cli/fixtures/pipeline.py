@@ -402,6 +402,7 @@ def dump_config(out: Path) -> None:
     base.write_text(
         "train:\n  steps: 10\n  seed: 0\ndata:\n  species: [mouse]\ntracker:\n  max_animals: 2\n",
         encoding="utf-8",
+        newline="\n",
     )
     cases, extends = [], []
     for item in CONFIG_OVERRIDES:
@@ -424,7 +425,7 @@ def dump_config(out: Path) -> None:
             }
         )
     for name, text in EXTENDS_FILES.items():
-        (folder / name).write_text(text, encoding="utf-8")
+        (folder / name).write_text(text, encoding="utf-8", newline="\n")
     for name, item in sorted(EXTENDS_CASES.items()):
         try:
             tree = load_config(folder / name, item)
@@ -435,6 +436,7 @@ def dump_config(out: Path) -> None:
     (folder / "overrides.json").write_text(
         json.dumps({"base": base.read_text(encoding="utf-8"), "cases": cases, "extends": extends}, indent=1),
         encoding="utf-8",
+        newline="\n",
     )
     print(f"  config/overrides.json {len(cases)} override strings, {len(KNOWN_DIFFERENCES)} expected to differ, "
           f"{len(extends)} extends trees")

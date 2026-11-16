@@ -4,12 +4,13 @@
 //! cargo run --release --features mps --example gpu_bench
 //! ```
 
-use animalpose::models::{load, Model};
-use animalpose::tensor::mpsgraph::GpuForward;
-use animalpose::tensor::{Ctx, Graph, NodeId};
-use std::time::Instant;
-
+#[cfg(target_os = "macos")]
 fn main() -> anyhow::Result<()> {
+    use animalpose::models::{load, Model};
+    use animalpose::tensor::mpsgraph::GpuForward;
+    use animalpose::tensor::{Ctx, Graph, NodeId};
+    use std::time::Instant;
+
     let root = animalpose::data::repo_root().expect("run inside the repository");
     for (kind, shape) in [
         ("detector", vec![1, 3, 256, 320]),
@@ -48,4 +49,9 @@ fn main() -> anyhow::Result<()> {
         println!("{kind} {shape:?}: cpu {cpu:.1} ms, mps {mps:.1} ms ({:.1}x), capture+compile {compile:.0} ms", cpu / mps);
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn main() -> anyhow::Result<()> {
+    anyhow::bail!("the MPSGraph benchmark requires macOS")
 }

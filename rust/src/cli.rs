@@ -81,7 +81,7 @@ pub fn command() -> Command {
                 .arg(
                     Arg::new("config")
                         .long("config")
-                        .default_value("configs/pipeline.yaml")
+                        .default_value(predict::DEFAULT_PIPELINE_CONFIG)
                         .value_name("CONFIG")
                         .help("the pipeline config"),
                 )
@@ -200,6 +200,16 @@ pub fn run(args: &[String]) -> Result<()> {
             train::run(model, Path::new(config), &overrides)
         }
         Some(("predict", p)) => {
+            let config =
+                if p.value_source("config") == Some(clap::parser::ValueSource::DefaultValue) {
+                    predict::default_pipeline_config()
+                        .to_string_lossy()
+                        .into_owned()
+                } else {
+                    p.get_one::<String>("config")
+                        .context("predict needs a config")?
+                        .clone()
+                };
             // `animalpose predict:main`: `--views` runs the multi-view 3D pipeline.
             if let Some(views) = p.get_many::<String>("views") {
                 let views: Vec<String> = views.cloned().collect();
@@ -210,8 +220,7 @@ pub fn run(args: &[String]) -> Result<()> {
                     .cloned()
                     .collect();
                 return crate::multiview::pipeline::run_cli(
-                    p.get_one::<String>("config")
-                        .context("predict needs a config")?,
+                    &config,
                     &views,
                     p.get_one::<String>("cameras")
                         .context("--views needs --cameras")?,
@@ -236,8 +245,7 @@ pub fn run(args: &[String]) -> Result<()> {
                     .join(format!("animalpose-synthetic-{}", std::process::id()));
                 crate::data::render::write_demo_frames(&dir, n)?;
                 let result = predict::run_with(
-                    p.get_one::<String>("config")
-                        .context("`crate::cli::predict` needs a config")?,
+                    &config,
                     &dir.to_string_lossy(),
                     p.get_one::<String>("out")
                         .context("`crate::cli::predict` needs --out")?,
@@ -250,8 +258,7 @@ pub fn run(args: &[String]) -> Result<()> {
                 return result;
             }
             predict::run_with(
-                p.get_one::<String>("config")
-                    .context("`crate::cli::predict` needs a config")?,
+                &config,
                 p.get_one::<String>("frames").context(
                     "`crate::cli::predict` needs --video (a video file or frame folder)",
                 )?,

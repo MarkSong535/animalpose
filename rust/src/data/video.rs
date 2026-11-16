@@ -45,14 +45,52 @@ fn ffprobe() -> PathBuf {
     tool("ANIMALPOSE_FFPROBE", "ffprobe")
 }
 
+fn video_command(exe: impl AsRef<Path>) -> Command {
+    #[allow(unused_mut)] // macOS and Windows configure the child's environment or console.
+    let mut cmd = Command::new(exe.as_ref());
+    #[cfg(target_os = "macos")]
+    {
+        // Finder-launched apps may have only the system directories on PATH.
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let paths = std::env::split_paths(&path)
+            .chain([PathBuf::from("/opt/homebrew/bin"), PathBuf::from("/usr/local/bin")]);
+        if let Ok(path) = std::env::join_paths(paths) {
+            cmd.env("PATH", path);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 /// `true` when the `ffmpeg` executable runs.
 pub fn ffmpeg_available() -> bool {
-    Command::new(ffmpeg())
+    video_command(ffmpeg())
         .arg("-version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+fn passthrough_args(exe: &Path) -> [&'static str; 2] {
+    // FFmpeg 4.4 uses -vsync. New releases accept -fps_mode and may remove -vsync.
+    let supports_fps_mode = video_command(exe)
+        .args(["-hide_banner", "-h", "full"])
+        .output()
+        .is_ok_and(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .any(|line| line.starts_with("-fps_mode"))
+        });
+    if supports_fps_mode {
+        ["-fps_mode", "passthrough"]
+    } else {
+        ["-vsync", "0"]
+    }
 }
 
 fn spawn_error(what: &Path, err: &std::io::Error) -> anyhow::Error {
@@ -78,7 +116,7 @@ pub struct VideoInfo {
 pub fn probe(path: &Path) -> Result<VideoInfo> {
     ensure!(path.is_file(), "no video file at {}", path.display());
     let exe = ffprobe();
-    let out = Command::new(&exe)
+    let out = video_command(&exe)
         .args([
             "-v",
             "error",
@@ -136,6 +174,7 @@ pub struct VideoReader {
     width: u32,
     height: u32,
     remaining: Option<usize>,
+    path: PathBuf,
 }
 
 impl VideoReader {
@@ -153,18 +192,17 @@ impl VideoReader {
         filter: Option<&str>,
     ) -> Result<Self> {
         let exe = ffmpeg();
-        let mut cmd = Command::new(&exe);
+        let mut cmd = video_command(&exe);
         cmd.args(["-v", "error", "-nostdin", "-i"]).arg(path);
         if let Some(filter) = filter {
-            cmd.args(["-vf", filter, "-fps_mode", "passthrough"]);
+            cmd.args(["-vf", filter]).args(passthrough_args(&exe));
         }
         if let Some(n) = max_frames {
             cmd.args(["-frames:v", &n.to_string()]);
         }
         cmd.args(["-f", "rawvideo", "-pix_fmt", "bgr24", "-"])
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stdout(Stdio::piped());
         let mut child = cmd.spawn().map_err(|e| spawn_error(&exe, &e))?;
         let stdout = child.stdout.take().context("ffmpeg has no stdout")?;
         Ok(Self {
@@ -173,6 +211,7 @@ impl VideoReader {
             width: info.width,
             height: info.height,
             remaining: max_frames,
+            path: path.to_owned(),
         })
     }
 
@@ -186,14 +225,14 @@ impl VideoReader {
         while filled < n {
             let got = self.stdout.read(&mut pixels[filled..])?;
             if got == 0 {
-                break;
+                self.remaining = Some(0);
+                let status = self.child.wait()?;
+                ensure!(status.success(), "ffmpeg could not decode {} ({status})", self.path.display());
+                ensure!(filled == 0, "ffmpeg ended in the middle of a frame");
+                return Ok(None);
             }
             filled += got;
         }
-        if filled == 0 {
-            return Ok(None);
-        }
-        ensure!(filled == n, "ffmpeg ended in the middle of a frame");
         if let Some(r) = self.remaining.as_mut() {
             *r -= 1;
         }
@@ -243,7 +282,7 @@ pub fn frames_at(path: &Path, indices: &[usize]) -> Result<Vec<(usize, Bgr)>> {
 /// shifted to start at 0, at most `max_frames` of them.
 pub fn timestamps(path: &Path, max_frames: Option<usize>) -> Result<Vec<f64>> {
     let exe = ffprobe();
-    let out = Command::new(&exe)
+    let out = video_command(&exe)
         .args([
             "-v",
             "error",
@@ -309,7 +348,7 @@ impl VideoWriter {
             vec!["-c:v", "mpeg4", "-q:v", "3"]
         };
         // yuv420p needs even dimensions; pad by one pixel when a side is odd.
-        let mut child = Command::new(&exe)
+        let mut child = video_command(&exe)
             .args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s"])
             .arg(format!("{width}x{height}"))
             .args(["-r", &format!("{}", self.fps), "-i", "-"])
@@ -380,7 +419,7 @@ impl VideoWriter {
 
 /// `true` when `ffmpeg -encoders` lists `name`.
 fn encoder_available(name: &str) -> bool {
-    Command::new(ffmpeg())
+    video_command(ffmpeg())
         .args(["-hide_banner", "-encoders"])
         .output()
         .is_ok_and(|o| {
@@ -438,7 +477,13 @@ mod tests {
 
         let picked = frames_at(&path, &[9, 2, 2]).unwrap();
         assert_eq!(picked.iter().map(|p| p.0).collect::<Vec<_>>(), [2, 9]);
+        assert_eq!(picked[0].1.pixels, frames[2].pixels);
         assert_eq!(picked[1].1.pixels, frames[9].pixels);
+        assert!(frames_at(&path, &[12, 99]).unwrap().is_empty());
+
+        let mut broken = VideoReader::open_filtered(&path, &info, None, Some("invalid_filter")).unwrap();
+        assert!(broken.next().unwrap().unwrap_err().to_string().contains("could not decode"));
+        assert!(broken.next().is_none());
 
         let t = timestamps(&path, None).unwrap();
         assert_eq!(t.len(), 12);

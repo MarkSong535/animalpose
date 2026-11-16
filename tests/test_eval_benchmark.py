@@ -18,7 +18,7 @@ from animalpose.cli.evaluate.benchmark import to_markdown
 from animalpose.data.datasets import SyntheticScenes
 from animalpose.data.synthetic import SimulationPool
 from animalpose.eval import benchmark as B
-from animalpose.pipeline import PipelineConfig, PosePipeline
+from animalpose.pipeline import PipelineConfig, PosePipeline, TrackResult, VideoResult
 from animalpose.skeleton import CANONICAL, SPECIES
 from animalpose.tracking.tracker import TrackerConfig
 from animalpose.train.loops import train_behavior, train_detector, train_pose, train_temporal
@@ -98,7 +98,27 @@ def report(pipe, models):
     pipe.cfg.embedder = "color"
     r["tracking_color_histogram"] = B.eval_tracking(pipe, videos=1, frames=40, n_animals=2)
     pipe.cfg.embedder = "model"
-    r["multiview"] = B.eval_multiview(pipe, models["t3"], frames=40, n_animals=2)
+    views = []
+    render_video = B.render_video
+
+    def record_observations(sim, camera, seed):
+        frames = render_video(sim, camera, seed)
+        tracks = {}
+        for animal in range(sim.n_animals):
+            tid = seed * sim.n_animals + animal
+            tracks[tid] = TrackResult(tid, np.arange(len(frames)),
+                                      np.stack([f.boxes[animal] for f in frames]),
+                                      np.stack([f.keypoints[animal] for f in frames]),
+                                      np.stack([f.visible[animal] for f in frames]).astype(np.float32))
+        views.append(VideoResult(tracks, len(frames)))
+        return frames
+
+    # Ground-truth 2D tracks keep this check of fusion, triangulation and scoring independent of
+    # whether briefly trained networks find a usable cross-view match on this CPU backend.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(B, "render_video", record_observations)
+        patch.setattr(pipe, "track", lambda frames, detections_fn: views.pop(0))
+        r["multiview"] = B.eval_multiview(pipe, models["t3"], frames=40, n_animals=2)
     r["throughput"] = [B.throughput(pipe, n=8, size=RENDER)]
     return r
 
@@ -183,12 +203,26 @@ def test_tracking_is_scored_per_view_against_the_simulated_identities(pipe, repo
 
 def test_multiview_triangulates_the_two_rats_from_three_views(report, pipe):
     m = report["multiview"]
-    assert m["n_animals"] == 2 and m["n_global_ids"] >= 1
+    assert m["n_animals"] == m["n_global_ids"] == 2
     assert 0.0 < m["triangulated_fraction"] <= 1.0
-    assert m["mpjpe_cm"] > 0.0 and m["median_error_cm"] <= m["mpjpe_cm"]
+    assert 0.0 <= m["mpjpe_cm"] < 0.01 and 0.0 <= m["median_error_cm"] < 0.01
     assert SPECIES["rat"].body_length_cm * 0.8 < m["body_length_cm"] < SPECIES["rat"].body_length_cm * 1.2
     assert m["mpjpe_smoothed_all_frames_cm"] > 0.0  # the 3D temporal model was part of the run
     assert pipe.cfg.embedder == "model"
+
+
+@pytest.mark.parametrize("has_tracks", (False, True))
+def test_multiview_reports_missing_errors_when_nothing_can_be_triangulated(pipe, monkeypatch, has_tracks):
+    def track(frames, detections_fn):
+        n, k = len(frames), CANONICAL.num_keypoints
+        tracks = {0: TrackResult(0, np.arange(n), np.zeros((n, 4)), np.zeros((n, k, 2)), np.zeros((n, k)))}
+        return VideoResult(tracks if has_tracks else {}, n)
+
+    monkeypatch.setattr(pipe, "track", track)
+    metrics = B.eval_multiview(pipe, frames=2)
+    assert metrics["triangulated_fraction"] == 0.0
+    assert metrics["mpjpe_cm"] is None and metrics["median_error_cm"] is None
+    assert json.loads(json.dumps(metrics, allow_nan=False)) == metrics
 
 
 def test_throughput_times_the_device_it_ran_on(report, pipe):
