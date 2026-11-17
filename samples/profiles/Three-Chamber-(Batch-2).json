@@ -1,0 +1,14 @@
+{
+  "name": "Three Chamber (Batch 2)",
+  "config": "sample-three-chamber.yaml",
+  "models": {
+    "detector": "sample-detector-ft.pt",
+    "pose": "sample-pose-mv2.pt",
+    "temporal": "sample-temporal-real.pt",
+    "behavior": "sample-behavior-3d.pt",
+    "arena": "sample-arena-three-chamber.pt"
+  },
+  "classify_behavior": true,
+  "camera_model": "sample-three-chamber.json",
+  "views": {}
+}

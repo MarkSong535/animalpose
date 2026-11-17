@@ -26,6 +26,7 @@
 pub mod calibration;
 pub mod camera;
 pub mod dense;
+pub mod drift;
 pub mod fusion;
 pub mod npz;
 pub mod pipeline;

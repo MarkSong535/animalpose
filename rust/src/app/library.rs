@@ -14,12 +14,14 @@ use super::recording::{default_stages, Stage};
 use crate::cli::predict::{checkpoint_path, default_pipeline_config};
 use crate::data::config::{Config, Value};
 use crate::models::{self, ModelKind};
+use crate::multiview::camera::{load_cameras, Camera};
 
-pub(crate) const MODEL_KINDS: [ModelKind; 4] = [
+pub(crate) const MODEL_KINDS: [ModelKind; 5] = [
     ModelKind::Detector,
     ModelKind::Pose,
     ModelKind::Temporal,
     ModelKind::Behavior,
+    ModelKind::Arena,
 ];
 pub(crate) const MODEL_EXTENSIONS: [&str; 2] = ["pt", "safetensors"];
 pub(crate) const CONFIG_EXTENSIONS: [&str; 2] = ["yaml", "yml"];
@@ -39,6 +41,10 @@ pub(crate) struct ConfigImport {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Settings {
+    /// The profile in use. `config`, `models`, `classify_behavior` and `stages` mirror it.
+    pub(crate) profile: Option<String>,
+    /// Result folders of recent jobs, newest first.
+    pub(crate) recent_results: Vec<PathBuf>,
     pub(crate) recordings: Option<PathBuf>,
     /// Where processed videos are saved; `None` puts the results next to the first video.
     pub(crate) output: Option<PathBuf>,
@@ -47,11 +53,21 @@ pub(crate) struct Settings {
     pub(crate) stages: Vec<Stage>,
     pub(crate) live: bool,
     pub(crate) classify_behavior: bool,
+    /// The arena's camera model (a calibration in `cameras/`) for multiview analysis.
+    pub(crate) camera_model: Option<String>,
+    /// The view each camera records as, by [`super::capture::Source::key`].
+    pub(crate) views: BTreeMap<String, String>,
+    /// Process the videos in each folder together, as views of one arena.
+    pub(crate) multiview: bool,
+    /// Sample files installed into the library ([`super::samples`]): bundle path → SHA-256.
+    pub(crate) samples: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            profile: None,
+            recent_results: Vec::new(),
             recordings: None,
             output: None,
             config: None,
@@ -59,7 +75,66 @@ impl Default for Settings {
             stages: default_stages(),
             live: true,
             classify_behavior: true,
+            camera_model: None,
+            views: BTreeMap::new(),
+            multiview: false,
+            samples: BTreeMap::new(),
         }
+    }
+}
+
+/// A named experiment setup, such as "Open Field": the pipeline config, the models, whether to
+/// classify behavior, the recording stages, and the arena's cameras (their model and the view
+/// each one records as). Stored as `profiles/<name>.json`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct Profile {
+    pub(crate) name: String,
+    pub(crate) config: Option<String>,
+    pub(crate) models: BTreeMap<String, String>,
+    pub(crate) classify_behavior: bool,
+    pub(crate) stages: Vec<Stage>,
+    pub(crate) camera_model: Option<String>,
+    pub(crate) views: BTreeMap<String, String>,
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        Self {
+            name: "Default".into(),
+            config: None,
+            models: BTreeMap::new(),
+            classify_behavior: true,
+            stages: default_stages(),
+            camera_model: None,
+            views: BTreeMap::new(),
+        }
+    }
+}
+
+impl Profile {
+    /// The profile's part of `settings`.
+    pub(crate) fn from_settings(name: &str, settings: &Settings) -> Self {
+        Self {
+            name: name.to_owned(),
+            config: settings.config.clone(),
+            models: settings.models.clone(),
+            classify_behavior: settings.classify_behavior,
+            stages: settings.stages.clone(),
+            camera_model: settings.camera_model.clone(),
+            views: settings.views.clone(),
+        }
+    }
+
+    /// Copies the profile into `settings` and makes it the one in use.
+    pub(crate) fn apply(&self, settings: &mut Settings) {
+        settings.profile = Some(self.name.clone());
+        settings.config = self.config.clone();
+        settings.models = self.models.clone();
+        settings.classify_behavior = self.classify_behavior;
+        settings.stages = self.stages.clone();
+        settings.camera_model = self.camera_model.clone();
+        settings.views = self.views.clone();
     }
 }
 
@@ -88,6 +163,115 @@ impl Library {
         file.as_file_mut().sync_all()?;
         file.persist(self.root.join("settings.json"))?;
         Ok(())
+    }
+
+    /// The file profile `name` is stored in.
+    pub(crate) fn profile_file(&self, name: &str) -> PathBuf {
+        self.profile_path(name)
+    }
+
+    fn profile_path(&self, name: &str) -> PathBuf {
+        self.root
+            .join("profiles")
+            .join(format!("{}.json", super::recording::safe_name(name)))
+    }
+
+    /// Every profile, by name.
+    pub(crate) fn profiles(&self) -> Vec<Profile> {
+        let mut profiles: Vec<Profile> = list(&self.root.join("profiles"), &["json"])
+            .into_iter()
+            .filter_map(|file| {
+                let bytes = fs::read(self.root.join("profiles").join(file)).ok()?;
+                serde_json::from_slice::<Profile>(&bytes).ok()
+            })
+            .filter(|profile| !profile.name.trim().is_empty())
+            .collect();
+        profiles.sort_by_key(|p| p.name.to_lowercase());
+        profiles
+    }
+
+    /// Saves `profile`, replacing the one called `previous` (a rename) when given. A name in use
+    /// by another profile is refused.
+    pub(crate) fn save_profile(&self, profile: &Profile, previous: Option<&str>) -> Result<()> {
+        let name = profile.name.trim();
+        ensure!(!name.is_empty(), "A profile needs a name.");
+        let path = self.profile_path(name);
+        let renamed = previous.is_some_and(|old| self.profile_path(old) != path);
+        ensure!(
+            !(renamed || previous.is_none()) || !path.exists(),
+            "A profile named {name} already exists."
+        );
+        let dir = self.root.join("profiles");
+        fs::create_dir_all(&dir)?;
+        let mut profile = profile.clone();
+        profile.name = name.to_owned();
+        let mut file = NamedTempFile::new_in(&dir)?;
+        serde_json::to_writer_pretty(file.as_file_mut(), &profile)?;
+        file.persist(&path)?;
+        if let Some(old) = previous.filter(|_| renamed) {
+            let _ = fs::remove_file(self.profile_path(old));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn delete_profile(&self, name: &str) -> Result<()> {
+        fs::remove_file(self.profile_path(name))
+            .with_context(|| format!("cannot delete the profile {name}"))
+    }
+
+    /// The config file `name` stands for; `None` is the default pipeline.
+    pub(crate) fn config_path(&self, name: Option<&str>) -> Result<PathBuf> {
+        let default = default_pipeline_config();
+        Ok(match name {
+            Some(name) => self.root.join("configs").join(filename(Path::new(name))?),
+            None if default.is_file() => default,
+            None => {
+                fs::create_dir_all(&self.root)?;
+                let path = self.root.join("default-pipeline.yaml");
+                if !path.exists() {
+                    fs::write(&path, "device: auto\n")?;
+                }
+                path
+            }
+        })
+    }
+
+    /// Arena camera models: calibrations (`cams.json`) of a multi-camera rig.
+    pub(crate) fn camera_models(&self) -> Vec<String> {
+        list(&self.root.join("cameras"), &["json"])
+    }
+
+    pub(crate) fn camera_model_path(&self, name: &str) -> Result<PathBuf> {
+        Ok(self.root.join("cameras").join(filename(Path::new(name))?))
+    }
+
+    /// The cameras of model `name`.
+    pub(crate) fn camera_model(&self, name: &str) -> Result<Vec<Camera>> {
+        load_cameras(self.camera_model_path(name)?)
+    }
+
+    /// Copies a calibration into the library after checking that it reads.
+    pub(crate) fn import_camera_model(&self, source: &Path) -> Result<String> {
+        let name = filename(source)?;
+        ensure!(
+            has_extension(source, &["json"]),
+            "Select a cams.json camera model."
+        );
+        let cameras = load_cameras(source)?;
+        ensure!(
+            cameras.len() > 1,
+            "A camera model for multiview needs at least two cameras."
+        );
+        let dir = self.root.join("cameras");
+        fs::create_dir_all(&dir)?;
+        for existing in self.camera_models() {
+            if same_contents(source, &dir.join(&existing))? {
+                return Ok(existing);
+            }
+        }
+        let mut tmp = NamedTempFile::new_in(&dir)?;
+        std::io::copy(&mut File::open(source)?, tmp.as_file_mut())?;
+        install(tmp, &dir, &name)
     }
 
     pub(crate) fn configs(&self) -> Vec<String> {
@@ -160,23 +344,13 @@ impl Library {
     }
 
     pub(crate) fn pipeline(&self, settings: &Settings) -> Result<PipelineFiles> {
-        let default = default_pipeline_config();
-        let config = match &settings.config {
-            Some(name) => self.root.join("configs").join(filename(Path::new(name))?),
-            None if default.is_file() => default,
-            None => {
-                fs::create_dir_all(&self.root)?;
-                let path = self.root.join("default-pipeline.yaml");
-                if !path.exists() {
-                    fs::write(&path, "device: auto\n")?;
-                }
-                path
-            }
-        };
+        let config = self.config_path(settings.config.as_deref())?;
         let base = Config::load(&config, &[])?;
         let mut overrides = Vec::new();
         for kind in MODEL_KINDS {
             let key = format!("checkpoints.{}", kind.as_str());
+            // Optional networks: a missing behavior classifier or arena detector is left out.
+            let optional = matches!(kind, ModelKind::Behavior | ModelKind::Arena);
             let behavior = kind == ModelKind::Behavior;
             if behavior && !settings.classify_behavior {
                 overrides.push(format!("{key}=null"));
@@ -184,7 +358,7 @@ impl Library {
                 let model = self.model_dir(kind).join(filename(Path::new(name))?);
                 match model.canonicalize() {
                     Ok(path) => overrides.push(format!("{key}={}", serde_json::to_string(&path)?)),
-                    Err(err) if behavior && err.kind() == ErrorKind::NotFound => {
+                    Err(err) if optional && err.kind() == ErrorKind::NotFound => {
                         overrides.push(format!("{key}=null"));
                     }
                     Err(err) => {

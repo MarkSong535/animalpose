@@ -137,5 +137,6 @@ def test_every_shipped_config_resolves_and_passes_its_check():
     for path in sorted(Path("configs").glob("*.yaml")):
         if path.name in ("real_sources.yaml",) or path.name.startswith("camera_"):
             continue  # a source list and camera profiles are checked where they are read
-        schema = pipeline_schema() if path.name.startswith("pipeline") else TRAIN_SCHEMA
+        pipeline = path.name.startswith("pipeline") or "checkpoints" in load_tree(path)
+        schema = pipeline_schema() if pipeline else TRAIN_SCHEMA
         load_config(path, schema=schema)

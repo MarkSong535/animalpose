@@ -13,9 +13,22 @@ use crate::data::video::{mp4_frames, VideoWriter};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Stage {
+    /// Optional; an unnamed stage is "Stage 2" and so on.
+    #[serde(default)]
     pub(crate) name: String,
     pub(crate) seconds: u32,
+    #[serde(default)]
     pub(crate) wait_after: bool,
+}
+
+impl Stage {
+    /// The stage's name, or `Stage <n>` (1-based) when it has none.
+    pub(crate) fn title(&self, index: usize) -> String {
+        match self.name.trim() {
+            "" => format!("Stage {}", index + 1),
+            name => name.to_owned(),
+        }
+    }
 }
 
 pub(crate) fn default_stages() -> Vec<Stage> {
@@ -88,29 +101,53 @@ impl Clock {
 pub(crate) struct Session {
     pub(crate) dir: PathBuf,
     pub(crate) stages: Vec<Stage>,
+    /// The view each camera records as; its clips are named after it.
+    views: Vec<String>,
     started: Instant,
     clock: Mutex<Clock>,
 }
 
 impl Session {
+    /// Starts recording into a new folder under `target`, named after `name` when one is given.
+    /// Camera `i` (of `sources`) records as `views[i]`.
     pub(crate) fn start(
         target: &Path,
+        name: &str,
         stages: Vec<Stage>,
         sources: &[String],
+        views: &[String],
     ) -> Result<Arc<Self>> {
         ensure!(
-            stages
-                .iter()
-                .all(|s| !s.name.trim().is_empty() && s.seconds > 0),
-            "Every stage needs a name and a duration greater than zero."
+            stages.iter().all(|s| s.seconds > 0),
+            "Every stage needs a duration greater than zero."
         );
-        let dir = new_output_dir(target, "recording")?;
+        ensure!(views.len() == sources.len(), "Every camera needs a view.");
+        if let Some(view) = super::views::duplicate(views) {
+            anyhow::bail!("Two cameras record as {view}. Give each camera its own view.");
+        }
+        let prefix = match name.trim() {
+            "" => "recording".to_owned(),
+            name => safe_name(name),
+        };
+        let dir = new_output_dir(target, &prefix)?;
         let clock = Clock::new(&stages);
-        let plan = serde_json::json!({"stages": stages, "sources": sources});
+        let titles: Vec<String> = stages.iter().enumerate().map(|(i, s)| s.title(i)).collect();
+        let plan = serde_json::json!({
+            "name": name.trim(),
+            "stages": stages,
+            "stage_titles": titles,
+            "sources": sources,
+            "views": sources.iter().zip(views).map(|(source, view)| serde_json::json!({
+                "view": view,
+                "source": source,
+                "file": format!("{}.mp4", safe_name(view)),
+            })).collect::<Vec<_>>(),
+        });
         fs::write(dir.join("session.json"), serde_json::to_vec_pretty(&plan)?)?;
         Ok(Arc::new(Self {
             dir,
             stages,
+            views: views.to_vec(),
             started: Instant::now(),
             clock: Mutex::new(clock),
         }))
@@ -138,8 +175,8 @@ impl Session {
     pub(crate) fn label(&self, phase: Phase) -> String {
         match phase {
             Phase::Manual => "Manual recording".to_string(),
-            Phase::Timed(i) => self.stages[i].name.clone(),
-            Phase::Waiting(i) => format!("Waiting after {}", self.stages[i].name),
+            Phase::Timed(i) => self.stages[i].title(i),
+            Phase::Waiting(i) => format!("Waiting after {}", self.stages[i].title(i)),
             Phase::Finished => "Finished".to_string(),
         }
     }
@@ -147,16 +184,20 @@ impl Session {
     fn phase_dir(&self, phase: Phase) -> PathBuf {
         let folder = match phase {
             Phase::Manual => "manual".to_owned(),
-            Phase::Timed(i) => format!("{:02}-{}", i + 1, safe_name(&self.stages[i].name)),
+            Phase::Timed(i) => format!("{:02}-{}", i + 1, safe_name(&self.stages[i].title(i))),
             Phase::Waiting(i) => {
-                format!("{:02}-{}-waiting", i + 1, safe_name(&self.stages[i].name))
+                format!(
+                    "{:02}-{}-waiting",
+                    i + 1,
+                    safe_name(&self.stages[i].title(i))
+                )
             }
             Phase::Finished => unreachable!("finished phases cannot receive frames"),
         };
         self.dir.join(folder)
     }
 
-    pub(crate) fn missing_stages(&self, clips: &[Clip]) -> Vec<&str> {
+    pub(crate) fn missing_stages(&self, clips: &[Clip]) -> Vec<String> {
         self.stages
             .iter()
             .enumerate()
@@ -165,7 +206,7 @@ impl Session {
                 (!clips
                     .iter()
                     .any(|clip| clip.path.parent() == Some(expected.as_path())))
-                .then_some(stage.name.as_str())
+                .then(|| stage.title(i))
             })
             .collect()
     }
@@ -240,10 +281,14 @@ struct ClipWriter {
 
 impl ClipWriter {
     fn new(frame: &Frame, camera: usize) -> Self {
-        let path = frame
-            .session
-            .phase_dir(frame.phase)
-            .join(format!("camera-{:02}.mp4", camera + 1));
+        let path =
+            frame
+                .session
+                .phase_dir(frame.phase)
+                .join(match frame.session.views.get(camera) {
+                    Some(view) => format!("{}.mp4", safe_name(view)),
+                    None => format!("camera-{:02}.mp4", camera + 1),
+                });
         let partial = path.with_extension("partial.mp4");
         Self {
             phase: frame.phase,
@@ -338,12 +383,80 @@ mod tests {
     }
 
     #[test]
+    fn unnamed_stages_are_numbered_and_recordings_take_their_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let stages = vec![
+            Stage {
+                name: "  ".into(),
+                seconds: 5,
+                wait_after: true,
+            },
+            Stage {
+                name: "Open field".into(),
+                seconds: 5,
+                wait_after: false,
+            },
+        ];
+        let session = Session::start(dir.path(), "Mouse 7", stages, &[], &[]).unwrap();
+        assert!(session
+            .dir
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("Mouse-7-"));
+        assert_eq!(session.label(Phase::Timed(0)), "Stage 1");
+        assert_eq!(session.label(Phase::Waiting(0)), "Waiting after Stage 1");
+        assert!(session.phase_dir(Phase::Timed(0)).ends_with("01-Stage-1"));
+        assert!(session
+            .phase_dir(Phase::Timed(1))
+            .ends_with("02-Open-field"));
+    }
+
+    #[test]
+    fn each_camera_records_as_its_own_view() {
+        let dir = tempfile::tempdir().unwrap();
+        let sources = ["a".to_owned(), "b".to_owned()];
+        let clash = Session::start(
+            dir.path(),
+            "",
+            Vec::new(),
+            &sources,
+            &["Top".into(), "top".into()],
+        );
+        assert!(clash
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("Two cameras record as top"));
+        let session = Session::start(
+            dir.path(),
+            "",
+            Vec::new(),
+            &sources,
+            &["Top".into(), "Side".into()],
+        )
+        .unwrap();
+        let plan: serde_json::Value =
+            serde_json::from_slice(&fs::read(session.dir.join("session.json")).unwrap()).unwrap();
+        assert_eq!(plan["views"][1]["view"], "Side");
+        assert_eq!(plan["views"][1]["source"], "b");
+        assert_eq!(plan["views"][0]["file"], "Top.mp4");
+    }
+
+    #[test]
     fn encodes_every_queued_frame_in_its_own_stage() {
         if !crate::data::video::ffmpeg_available() {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let session = Session::start(dir.path(), default_stages(), &["source".into()]).unwrap();
+        let session = Session::start(
+            dir.path(),
+            "",
+            default_stages(),
+            &["source".into()],
+            &["Top View".into()],
+        )
+        .unwrap();
         let (sender, receiver) = std::sync::mpsc::sync_channel(2);
         let encoder = std::thread::spawn(move || encode(0, receiver));
         for (phase, count) in [
@@ -376,13 +489,11 @@ mod tests {
         );
         assert!(report.clips[0]
             .path
-            .ends_with("01-Accustomization/camera-01.mp4"));
+            .ends_with("01-Accustomization/Top-View.mp4"));
         assert!(report.clips[1]
             .path
-            .ends_with("01-Accustomization-waiting/camera-01.mp4"));
-        assert!(report.clips[2]
-            .path
-            .ends_with("02-Experiment/camera-01.mp4"));
+            .ends_with("01-Accustomization-waiting/Top-View.mp4"));
+        assert!(report.clips[2].path.ends_with("02-Experiment/Top-View.mp4"));
         for clip in report.clips {
             assert_eq!(
                 crate::data::video::probe(&clip.path).unwrap().frames,

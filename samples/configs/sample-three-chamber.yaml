@@ -1,0 +1,46 @@
+# Three Chamber (Batch 2): ~/upload2/Three Chamber (larcc). Standalone: no `extends`, the networks come from the profile.
+# Multiview: put each top/side pair in its own folder as top.mp4 and side.mp4.
+device: auto
+pipeline:
+  det_size:
+  - 256
+  - 320
+  det_thresh: 0.3
+  crop_size: 192
+  kp_conf_thresh: 0.3
+  embedder: model
+  pair_decoding: true
+  pair_identity: true
+  pair_motion_frac: 0.1
+  temporal_window: 64
+tracker:
+  high_thresh: 0.5
+  low_thresh: 0.2
+  max_animals: 3
+  max_lost: 90
+checkpoints:
+  detector: null
+  pose: null
+  temporal: null
+  behavior: null
+  arena: null
+assay:
+  experiment: three_chamber
+  arena:
+    rig: sample-three-chamber
+    width: 0.8226
+    top_view: top
+    side_view: side
+  cups:
+  - name: L
+    center:
+    - -0.3364
+    - 0.0045
+    radius: 0.08
+    height: 0.1756
+  - name: R
+    center:
+    - 0.3377
+    - 0.0029
+    radius: 0.08
+    height: 0.1756

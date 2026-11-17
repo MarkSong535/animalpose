@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "about": "Sample profiles from the lab's recordings (larcc). Built by scripts/build_samples.py.",
+  "networks": {
+    "detector": "sample-detector-ft.pt",
+    "pose": "sample-pose-mv2.pt",
+    "temporal": "sample-temporal-real.pt",
+    "behavior": "sample-behavior-3d.pt"
+  },
+  "arena_detectors": {
+    "three_chamber": "sample-arena-three-chamber.pt",
+    "open_field": "sample-arena-open-field.pt",
+    "grooming": "sample-arena-grooming.pt",
+    "plus_maze": "sample-arena-plus-maze.pt"
+  },
+  "profiles": [
+    "Three Chamber (Pre-Cd F2)",
+    "Three Chamber (Pre-Cd F2 Video)",
+    "Open Field (Pre-Cd F2 Video)",
+    "Three Chamber (Batch 2)",
+    "Grooming",
+    "Open Field (Batch 2)",
+    "Plus Maze"
+  ],
+  "files": [
+    {
+      "path": "models/detector/sample-detector-ft.pt",
+      "sha256": "59bcbbb8a0763b64c495c35866ccfc60faea544b23ad88f3b06ac3e25da9d4f7",
+      "bytes": 7212789
+    },
+    {
+      "path": "models/pose/sample-pose-mv2.pt",
+      "sha256": "7936797f812a3ecd698ed99f68a54188125d27ef230d6fc42779ecc7978dbd6f",
+      "bytes": 45991757
+    },
+    {
+      "path": "models/temporal/sample-temporal-real.pt",
+      "sha256": "cbbf1171ed72e54aecb1704af8b042d0dfee0cd2a40af96ec057a0d7fd563cb9",
+      "bytes": 11309197
+    },
+    {
+      "path": "models/behavior/sample-behavior-3d.pt",
+      "sha256": "e55388044eeb803a466cfec21f0c6cd4d00a7ebb5c528f22d9b71fbc9ad82fce",
+      "bytes": 382205
+    },
+    {
+      "path": "models/arena/sample-arena-three-chamber.pt",
+      "sha256": "c033acf59149748b12ea8cba9131786efa484bc5e69bc99ab5a96c8d65cc8e37",
+      "bytes": 23016166
+    },
+    {
+      "path": "models/arena/sample-arena-open-field.pt",
+      "sha256": "c8f26c90590628bf7825b83a8210c241b6ab12396d4ceb1cec3d5125f985b6cc",
+      "bytes": 23013669
+    },
+    {
+      "path": "models/arena/sample-arena-grooming.pt",
+      "sha256": "473d25195c6993f1cb4573de04fe752a32ec2e2c75ebc089f61814cca2caeb7a",
+      "bytes": 23013263
+    },
+    {
+      "path": "models/arena/sample-arena-plus-maze.pt",
+      "sha256": "425c74f98006c168426f9f02dd6fadf50a680abc4aeb0ea822581b723f0c9ded",
+      "bytes": 23015930
+    },
+    {
+      "path": "configs/sample-3-chamber.yaml",
+      "sha256": "ec2fda88b5895f1ffd6875d0e3d1289bed16f0cbc620554bf306b07e1c32a17f",
+      "bytes": 906
+    },
+    {
+      "path": "cameras/sample-3-chamber.json",
+      "sha256": "5bcc11a5951c26a3e57d8d6e4779e0987be7c90a1d161fdf1d81a0a286546ab7",
+      "bytes": 1334
+    },
+    {
+      "path": "profiles/Three-Chamber-(Pre-Cd-F2).json",
+      "sha256": "1b1231abde6f8e682638773c85e58e67211c6343670797beb87b14117b0adf83",
+      "bytes": 389
+    },
+    {
+      "path": "configs/sample-3-chambers-video.yaml",
+      "sha256": "3f6a4c8a7157ef180ea74767c6a47822831270f63fd5935168abee65883d516b",
+      "bytes": 928
+    },
+    {
+      "path": "cameras/sample-3-chambers-video.json",
+      "sha256": "6d8c0485616b578f8ecf9234c8b1ae27e479de0e6e3880882beef988cc987264",
+      "bytes": 1319
+    },
+    {
+      "path": "profiles/Three-Chamber-(Pre-Cd-F2-Video).json",
+      "sha256": "173da37f7c2d195c85047e2bc2070bcbd5a612eb14d08192ef1481bf8131432f",
+      "bytes": 409
+    },
+    {
+      "path": "configs/sample-open-field-video.yaml",
+      "sha256": "56ee516479125d3d1daa0f6cf55e6fb38d4cf78088f8daf01beca540e769b1a3",
+      "bytes": 764
+    },
+    {
+      "path": "cameras/sample-open-field-video.json",
+      "sha256": "ce8f74ecf346b36b7a217d222257f6a9d5d0a2c9684e346ca6e5e185c492f9ba",
+      "bytes": 1329
+    },
+    {
+      "path": "profiles/Open-Field-(Pre-Cd-F2-Video).json",
+      "sha256": "7675641adaa4b02aef09da7335c8e8ab4c6a611ad495d5657591e4f75793c1e1",
+      "bytes": 403
+    },
+    {
+      "path": "configs/sample-three-chamber.yaml",
+      "sha256": "bfa4ab2bdde2803c53cc20ec39a5d98cae84989c670535eea5667d388a05f9b8",
+      "bytes": 897
+    },
+    {
+      "path": "cameras/sample-three-chamber.json",
+      "sha256": "5b92eb91218e41ea3eba0e40cda1bf80b52223ce0bb26d21510b5c2a4760716f",
+      "bytes": 1338
+    },
+    {
+      "path": "profiles/Three-Chamber-(Batch-2).json",
+      "sha256": "f0cf9ba68f7498f62a1c6990e9913340a4c1be9a3b408b0dbde09514d86044b3",
+      "bytes": 395
+    },
+    {
+      "path": "configs/sample-grooming.yaml",
+      "sha256": "1f1022b68abfcbacf1444f6ce1324c23bdfd238c38e21d1a90affd28f9896457",
+      "bytes": 712
+    },
+    {
+      "path": "cameras/sample-grooming.json",
+      "sha256": "e454cdd2d3291e74f1b314760ceb9f1aa856d78128b750c1556c3844d4902285",
+      "bytes": 1327
+    },
+    {
+      "path": "profiles/Grooming.json",
+      "sha256": "2a603f053bba7b2bf589cf03e0dce62871d452723d799b6b3010e54ab9e08093",
+      "bytes": 365
+    },
+    {
+      "path": "configs/sample-opf.yaml",
+      "sha256": "844e8198b5d73ddb7a5f7b0b3ffae4dfa3a62017db632838f3e65a33451ec270",
+      "bytes": 716
+    },
+    {
+      "path": "cameras/sample-opf.json",
+      "sha256": "624ec0d0d9032e1aedb71b153e7abec9ced46ddb8b44c0f709dce933d3135b83",
+      "bytes": 1319
+    },
+    {
+      "path": "profiles/Open-Field-(Batch-2).json",
+      "sha256": "947992c40e9557b5a805e35f404cb2123e6e46b9cc91c8f7c4fcf83cf82a995e",
+      "bytes": 369
+    },
+    {
+      "path": "configs/sample-plus-maze.yaml",
+      "sha256": "365e609191851dc6dedbbd9c79115e53a25ce91dbbcccc1ca824a5dcbe9d83a6",
+      "bytes": 713
+    },
+    {
+      "path": "profiles/Plus-Maze.json",
+      "sha256": "af952191b96eab734ff2fe99d410a068f2f7f903e47a2475877046817321ed3f",
+      "bytes": 350
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Open field seen from above: the arena's 4 corners.
+name: open_field
+experiment: open_field
+ask: the arena's 4 corners
+order: box
+points: [corner 1 (top-left), corner 2, corner 3, corner 4]
+floor: [1, 2, 3, 4]
+zones: []
+sources:
+  experiments: [Open Field Video, opf]

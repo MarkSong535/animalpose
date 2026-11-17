@@ -1,126 +1,156 @@
-# Animal Pose
+<p align="center">
+  <a href="https://github.com/MarkSong535/animalpose">
+    <img width=90% src="docs/icons/Horizontal.png">
+  </a>
+</p>
 
-Multi-animal pose estimation for rodents, built so one model can serve many species and camera angles.
+Multi-animal rodent pose estimation across species and camera angles, from one camera or a calibrated
+rig, with behavior scoring for standard experiments. A Python package and a pure-Rust CLI and desktop
+app share one set of configs and checkpoints.
 
-1. **detect**: find each animal (CenterNet-style, one species-agnostic "animal" class).
-2. **pose**: 25 canonical keypoints per animal.
-3. **track**: Kalman + Hungarian on IoU, pose and a learned appearance embedding.
-4. **refine**: a temporal LSTM smooths jitter and fills gaps.
-5. **behavior**: a TCN labels each frame, and a 132-entry catalogue fills in the rest.
-
-It handles one camera at any angle, or a calibrated multi-camera rig triangulated to 3D. It ships as a
-PyTorch package (`src/animalpose`) and a pure-Rust binary (`rust/`) that read the same configs and the
-same checkpoints.
-
-## Why not DeepLabCut?
-
-DeepLabCut trains one network per project and keypoint set. Here:
-
-- **One vocabulary.** Every dataset maps onto a fixed 25-point quadruped skeleton, and unlabeled points are
-  masked out of the loss, so datasets with different keypoints train one network.
-- **One head for every species.** Each keypoint is a learned query dotted with a shared feature map.
-  Adding a keypoint means appending a query.
-- **View-invariant temporal and behavior models.** They work in a normalized, egocentric frame and train
-  on poses projected through random cameras.
-
-## Quick start
-
-```bash
-git clone <repo> && cd animalpose && git lfs pull      # weights/*_general.pt
-pip install -e ".[dev]"
-animalpose predict --video myvideo.mp4 --out outputs/run   # tracks.csv, behavior.csv, overlay.mp4
+```mermaid
+flowchart LR
+  V[Video] --> D[Detect] --> P["Pose<br/>(25 keypoints)"] --> T[Track] --> R[Refine] --> B[Behavior]
+  R --> A["Assay<br/>(experiment rules)"]
+  subgraph Multiview
+    C["Camera model<br/>+ drift correction"] --> F["Fuse views<br/>→ 3D"]
+  end
+  T --> F --> B
+  F --> A
 ```
 
-Or with no Python at all:
+A shared 25-keypoint skeleton lets datasets with different annotations train one model: CenterNet-style
+detection, top-down pose, Kalman + Hungarian tracking, LSTM refinement and TCN behavior classification.
+
+## Install and run
+
+Needs FFmpeg (`ffmpeg`, `ffprobe`) for video and Git LFS for the general weights in `weights/`.
+
+```bash
+git lfs pull
+pip install -e ".[dev]"                                    # Python 3.10+
+animalpose predict --video myvideo.mp4 --out outputs/run
+```
+
+Rust (no Python or PyTorch; reads `.pt` and `.safetensors` directly):
 
 ```bash
 cd rust && cargo build --release
-./target/release/animalpose predict --video myvideo.mp4 --out outputs/run
+./target/release/animalpose predict --video ../myvideo.mp4 --out ../outputs/run
 ```
 
-The desktop app does live tracking from USB cameras, records, and analyzes the recording. On a Mac it
-runs the networks on the GPU (Metal):
+Desktop apps share `~/AnimalPose` (models, configs, profiles, camera models, settings):
 
 ```bash
-cd rust && cargo run --release --features gui --bin animalpose-gui
+cd rust && cargo run --release --features gui --bin animalpose-gui    # Windows, Linux, macOS (egui)
+cd macos && ./build-app.sh && open build/AnimalPose.app                # native macOS app (SwiftUI)
 ```
 
-`configs/pipeline.yaml` points at the four general checkpoints in `weights/` (detector, pose, temporal,
-behavior). Video input needs `ffmpeg` on `PATH`.
+The macOS app needs Rust and Xcode (Swift 6) to build and runs on macOS 14+; Liquid Glass needs
+Xcode 26 and macOS 26. Prebuilt CLI, apps (`.dmg`, `.exe`, `.deb`, `.rpm`) and the models zip are on
+GitHub Releases: extract `animalpose-models-v<version>.zip` into `~/.animalpose`.
 
-## Fine-tune on your recording
+## Using the app
 
-No hand labels needed:
+The sidebar has **Process**, **Live**, the **Profile** in use and recent **Results**. Status messages
+fade after 5 seconds (hover to keep one).
 
-```bash
-animalpose data audit myvideo.mp4 --out configs/camera.yaml        # blur, noise, animal size
-animalpose label --root videos/ --include myvideo --boxes blob --range 0 0.8 --no-holdout \
-    --out data/processed/myvideo                                   # first 80 % of the recording
-animalpose finetune pose configs/pose.yaml weights/pose_general.pt \
-    data.source=coco data.json=data/processed/myvideo/train.json data.camera_profile=configs/camera.yaml
-animalpose eval unlabeled --root videos/ --include myvideo --all-sources --range 0.8 1.0 \
-    --pairs weights/detector_general.pt:weights/pose_general.pt weights/detector_general.pt:runs/pose.pt
-animalpose behavior cluster --tracks outputs/run/tracks.npz --video myvideo.mp4 --out outputs/run/clusters
-```
+- **Profiles** (Settings → Profiles) bundle a config, the models, the recording stages, the camera
+  model and camera names. Switch from the sidebar; right-click a profile to **Duplicate** or **Delete**.
+  The sample profiles in `samples/` (with their networks and camera models) install on first launch.
+- **Live**: select cameras and press **Preview**. Each tile's label ("Camera 1", "Camera 2", …) is
+  editable and becomes the clip's name, so processing knows which view is which. **Timed** (red)
+  records the profile's stages (e.g. Accustomization, then Experiment; **Wait for Continue** splits a
+  pause into its own clip); **Record** runs until **Stop**. Clips go to `~/AnimalPose/recordings`, one
+  MP4 per camera per stage, with `session.json` listing views, frame counts and capture times.
+  **Analyze Recording** processes the last session in place.
+- **Process**: drop videos or folders, pick the output folder, press **Process**. One video gives
+  `<name>-analysis/`; several give `animalpose-batch-…/` with `batch.json`. Pause, resume and stop keep
+  finished work.
+- **Multiview** (Process): choose a camera model in the profile (Import… a `cams.json`). Each folder's
+  videos are matched to cameras by name or number and fused into 3D.
+- **Experiments**: Settings → Configs → Experiment picks open field, plus maze, three chamber or
+  grooming; results gain an `assay/` folder. Adding a setup needs no code: see
+  [docs/new_experiment.md](docs/new_experiment.md).
+- **Configs** edits thresholds, tracking, smoothing, behavior, camera drift and experiment rules;
+  the shipped pipeline is read-only, duplicate it to edit.
 
-`label` keeps only confident detections and keypoints that agree under a mirror flip.
-`eval unlabeled` compares the general and fine-tuned models on the last 20 %, which was never trained
-on: detection rate, flip agreement, jitter and confidence. DeepLabCut projects convert with `animalpose data convert`; multi-camera rigs calibrate
-with `animalpose data calibrate` and run with `predict --views a.mp4 b.mp4 --cameras cams.json`.
+Recording has priority over analysis: frames queue in order and capture waits rather than drops;
+cameras are free-running (no hardware sync). Apple Silicon runs the networks on Metal (~6× the CPU).
 
-## Results (held-out public data)
+## Command line
 
-Training data: CRIM13, Rat 7M and mirror-mouse train splits (CC BY 4.0), plus the simulator.
+Python (`animalpose …`) and Rust (`rust/target/release/animalpose …`) take the same commands.
 
-| Set | View | Pose PCK@0.1 | Detection AP50 |
-|---|---|---|---|
-| CRIM13 (new sessions), 2 mice | top | 0.89 | 0.91 |
-| Rat 7M (time-disjoint), 6 cameras | side, 8–32° | 0.97 | 0.99 |
-| mirror-mouse (new animals) | side | 0.94 | 1.00 |
-| mirror-mouse (new animals) | bottom | 1.00 | 0.98 |
+| Command | What it does |
+|---|---|
+| `predict` | `--video` (file or frame folder), `--views` + `--cameras` for 3D, or `--synthetic` |
+| `train`, `finetune` | detector, pose, temporal and behavior networks |
+| `label` | pseudo-label unlabeled recordings |
+| `behavior` | `cluster`, `name`, `label`, `plot` |
+| `assay` | rerun experiment rules on finished analyses, no networks (Rust) |
+| `data` | `audit`, `calibrate` (camera model from landmarks), `convert`, `prepare`, `download` |
+| `eval` | metrics and benchmarks (AP, PCK, MOTA/IDF1, F1) |
+| `export` | `safetensors`, `import-safetensors` (Python also ONNX / TorchScript) |
 
-- **3D, Rat 7M vs motion capture:** 13.5 mm MPJPE, 9.0 mm median (rat ≈ 200 mm).
-- **Two-mouse tracking, CRIM13:** identity purity 0.90, 3 swaps over 4 × 1,200 frames.
-- **Side-view paws:** left/right PCK 0.91 from one view, 0.97 with a second view.
-- **Occlusion:** keypoint confidence separates visible from hidden points (AUROC 0.985).
+## Configs
 
-Models trained on the simulator alone score near zero on real video, so real data is what drives these
-numbers.
+`configs/pipeline.yaml` is the default; a config may `extends:` another, and any key can be overridden
+by trailing dotted arguments (`animalpose predict … pipeline.det_thresh=0.4 drift.enabled=false`).
 
-![Two-mouse tracking on a held-out CRIM13 video](docs/crim13_demo.png)
+| Block | Sets |
+|---|---|
+| `checkpoints` | detector, pose, temporal, behavior (`checksums:` verifies SHA-256 before loading) |
+| `pipeline`, `tracker` | detection, pose, background, tracking and smoothing |
+| `drift` | how multiview cameras are re-registered each session (below) |
+| `assay` | experiment, arena and rule thresholds; every key at its default in `configs/assay_example.yaml` |
 
-*Hollow points were filled in by the temporal model. CRIM13 by Burgos-Artizzu et al., distributed by
-Lightning Pose under CC BY 4.0.*
+**Camera drift.** A calibration holds while cameras stay put. Before each fusion, every camera's
+median background is registered against its reference picture (`<model>.references/<camera>.png`,
+taken from the first session fused with that model): a coarse-to-fine alignment over the camera's
+rotation through its own lens model, with lighting gain/offset and robust weights so moved objects
+count less than walls and desk. The rotation is applied when it improves the agreement; nothing caps
+how far a camera may move. Results go to `camera_drift.json`. Delete the folder to take a new
+reference; a camera moved to another place needs a new calibration.
 
-## Rust
+## Outputs
 
-`rust/` is a dependency-light port: no PyTorch, no OpenCV, no C toolchain. It loads `.pt` and
-`.safetensors` checkpoints directly, reads the same YAML configs, and writes the same outputs. Its tests
-pin it to the Python reference (keypoints within 1e-3 px on the pipeline fixture). See
-[rust/README.md](rust/README.md).
+| File | Contents |
+|---|---|
+| `tracks.csv`, `tracks.npz` | a row per frame, track and keypoint: x, y, confidence, behavior (npz adds boxes) |
+| `behavior.csv`, `overlay.mp4`, `timing.json` | behavior classes, rendered video, frame times |
+| `animals3d.npz`, `view<N>_tracks.csv` | multiview: 3D keypoints, reprojection error, per-view tracks |
+| `views.json`, `cameras.json`, `camera_drift.json` | which video is which camera, cameras used, drift |
+| `assay/behavior_v3.csv`, `behavior_summary_v3.csv` | per-frame states and per-session measures |
 
-## Layout
+![Two-mouse tracking on a CRIM13 video](docs/crim13_demo.png)
+
+## Development
 
 | Path | Contents |
 |---|---|
-| `src/animalpose/` | Python package: `skeleton`, `detector`, `pose`, `tracking`, `temporal`, `behavior`, `multiview`, `data`, `eval`, `export`, `cli` |
-| `rust/` | the Rust port and its tests |
-| `configs/` | the inference pipeline and the synthetic training recipes; configs inherit with `extends:` |
-| `weights/` | the four general checkpoints (git-lfs) |
-| `tests/` | the Python suite plus the torch fixtures the Rust tests check against |
+| `src/animalpose/` | Python reference: models, training, pipeline, multiview, CLI |
+| `rust/src/` | `tensor`, `models`, `algos`, `data`, `multiview`, `assay`, `eval`, `cli`, `app` (shared engine), `gui`, `ffi` |
+| `macos/` | SwiftUI app over the engine's C interface (`rust/src/ffi.rs`) |
+| `configs/`, `weights/`, `samples/` | configs and arenas, the four general checkpoints, bundled sample profiles |
 
 ```bash
-pytest                       # Python suite
-cd rust && cargo test        # Rust suite
+pytest -q -m "not slow"                       # Python; CI also runs the slow tests with coverage
+ruff check src tests
+cd rust && cargo fmt --all -- --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo test --release --features gui           # app, GUI and Metal (macOS)
+cargo clippy --features ffi --all-targets -- -D warnings
 ```
 
-## Next steps
-
-- Side-view paws when the far legs are hidden: about 10 % of separated pairs still swap.
-- Behavior needs more human-labeled real data, especially rearing and grooming.
-- Zero-shot tests on new species (iRodent, AP-10K).
-- Score tracking identity against human labels instead of a coat-brightness proxy.
+Python is the reference: Rust tests compare against torch/NumPy dumps in `tests/fixtures` (networks
+within 5e-5, pipeline keypoints within 1e-3 px, checkpoints bit-exact), and intentional differences
+are marked `// differs from Python:`. Rust features: `app` (engine), `gui` (egui window, includes
+`mps`), `ffi` (static library for the macOS app), `mps` (Metal). `rust-toolchain.toml` pins 1.88.0;
+the minimum supported Rust is 1.77. Rebuild the sample profiles with `scripts/build_samples.py`, and
+the app icons (macOS `.icns`, window `.png`, Windows `.ico`) from `docs/icons/minimal.svg` with
+`scripts/make_icons.sh` (macOS).
+Releases: **Actions → Release → Run workflow** builds every package; a `v0.1.0`-style tag publishes them.
 
 ## License
 
-GPL-3.0-only. Datasets and pretrained weights you download carry their own licenses, some non-commercial.
+GPL-3.0-only. Datasets and pretrained weights may have separate licenses.

@@ -1,6 +1,10 @@
-//! The egui window over [`crate::app::Engine`]: the desktop application on Windows and Linux (macOS
-//! has a native app in `macos/`). Two pages, Live (cameras, preview, recording) and Process (the
-//! video list, output folder and batch progress), and a Settings window on ⌘, / Ctrl+,.
+//! The egui window over [`crate::app::Engine`]: the desktop application on Windows and Linux. It
+//! follows the native macOS app (`macos/`) control for control: a sidebar with Process, Live, the
+//! Profile menu and recent Results; a toolbar; content with a floating glass panel at the bottom; a
+//! status banner; and a Settings window (Ctrl+, / ⌘,) with General, Profiles and Configs.
+//!
+//! egui cannot blur what lies behind a panel, so "glass" is a translucent fill with a light rim and
+//! a soft shadow. Switches and hover states animate as on macOS.
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -11,18 +15,123 @@ use std::time::Duration;
 
 use anyhow::Result;
 use eframe::egui;
-use egui::{Color32, RichText};
+use egui::{
+    vec2, Align, Align2, Color32, FontId, Id, Layout, Rect, Response, RichText, Rounding, Sense,
+    Stroke, Ui,
+};
+use serde_json::{json, Value};
 
-use crate::app::library::{CONFIG_EXTENSIONS, MODEL_EXTENSIONS, MODEL_KINDS};
+use crate::app::library::{Profile, CONFIG_EXTENSIONS, MODEL_EXTENSIONS, MODEL_KINDS};
 use crate::app::processing::Mode as ProcessingMode;
-use crate::app::recording::{self, Phase};
+use crate::app::recording::{Phase, Stage};
 pub use crate::app::{analyze, list_cameras, Source};
 use crate::app::{display_name, Engine, ImportKind};
 
-/// The system accent blue.
-const ACCENT: Color32 = Color32::from_rgb(10, 132, 255);
 const SETTINGS: egui::KeyboardShortcut =
     egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::Comma);
+/// The macOS app's menu commands, with the same keys (⌘ is Ctrl on Windows and Linux).
+const fn command(key: egui::Key) -> egui::KeyboardShortcut {
+    egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, key)
+}
+const ADD_VIDEOS: egui::KeyboardShortcut = command(egui::Key::O);
+const PROCESS: egui::KeyboardShortcut = command(egui::Key::Enter);
+const PAUSE: egui::KeyboardShortcut = egui::KeyboardShortcut::new(
+    egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+    egui::Key::P,
+);
+const STOP: egui::KeyboardShortcut = command(egui::Key::Period);
+const PAGE_PROCESS: egui::KeyboardShortcut = command(egui::Key::Num1);
+const PAGE_LIVE: egui::KeyboardShortcut = command(egui::Key::Num2);
+const SIDEBAR: f32 = 230.0;
+/// How long a banner message stays, and how long it takes to fade (s).
+const BANNER_SECONDS: f64 = 5.0;
+const BANNER_FADE: f64 = 0.4;
+const TOOLBAR: f32 = 52.0;
+const ACCENT: Color32 = Color32::from_rgb(10, 132, 255);
+const RED: Color32 = Color32::from_rgb(255, 69, 58);
+const ORANGE: Color32 = Color32::from_rgb(255, 159, 10);
+
+/// Colors of the macOS appearance, light or dark.
+#[derive(Clone, Copy)]
+struct Palette {
+    dark: bool,
+    content: Color32,
+    sidebar: Color32,
+    group: Color32,
+    separator: Color32,
+    secondary: Color32,
+    tertiary: Color32,
+    control: Color32,
+    control_hover: Color32,
+    selection: Color32,
+    glass: Color32,
+    glass_rim: Color32,
+    shadow: Color32,
+}
+
+impl Palette {
+    fn of(ui: &Ui) -> Self {
+        Self::new(ui.visuals().dark_mode)
+    }
+
+    fn new(dark: bool) -> Self {
+        if dark {
+            Self {
+                dark,
+                content: Color32::from_rgb(30, 30, 30),
+                sidebar: Color32::from_rgb(40, 40, 42),
+                group: Color32::from_rgb(44, 44, 46),
+                separator: Color32::from_white_alpha(22),
+                secondary: Color32::from_rgb(152, 152, 157),
+                tertiary: Color32::from_rgb(99, 99, 102),
+                control: Color32::from_white_alpha(26),
+                control_hover: Color32::from_white_alpha(40),
+                selection: Color32::from_white_alpha(28),
+                glass: Color32::from_rgba_unmultiplied(50, 50, 54, 205),
+                glass_rim: Color32::from_white_alpha(34),
+                shadow: Color32::from_black_alpha(110),
+            }
+        } else {
+            Self {
+                dark,
+                content: Color32::WHITE,
+                sidebar: Color32::from_rgb(236, 236, 238),
+                group: Color32::from_rgb(246, 246, 248),
+                separator: Color32::from_black_alpha(22),
+                secondary: Color32::from_rgb(110, 110, 115),
+                tertiary: Color32::from_rgb(174, 174, 178),
+                control: Color32::from_black_alpha(14),
+                control_hover: Color32::from_black_alpha(26),
+                selection: Color32::from_black_alpha(20),
+                glass: Color32::from_rgba_unmultiplied(252, 252, 254, 215),
+                glass_rim: Color32::from_white_alpha(230),
+                shadow: Color32::from_black_alpha(40),
+            }
+        }
+    }
+
+    fn text(&self) -> Color32 {
+        if self.dark {
+            Color32::from_rgb(235, 235, 240)
+        } else {
+            Color32::from_rgb(28, 28, 30)
+        }
+    }
+
+    /// A translucent floating panel with a light rim and a soft shadow.
+    fn glass(&self, radius: f32) -> egui::Frame {
+        egui::Frame::none()
+            .fill(self.glass)
+            .stroke(Stroke::new(1.0, self.glass_rim))
+            .rounding(radius)
+            .shadow(egui::epaint::Shadow {
+                offset: vec2(0.0, 8.0),
+                blur: 28.0,
+                spread: 0.0,
+                color: self.shadow,
+            })
+    }
+}
 
 #[derive(Clone, Copy)]
 enum Selection {
@@ -30,7 +139,8 @@ enum Selection {
     OutputFolder,
     Videos,
     VideoFolders,
-    Calibration,
+    /// A camera model for the profile in `App::camera_model_for`.
+    CameraModel,
     Model,
     Config,
     ImportFolder,
@@ -71,15 +181,35 @@ impl Wake for Repaint {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
-    Live,
     Process,
+    Live,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum SettingsTab {
+enum Tab {
     General,
-    Pipeline,
-    Protocol,
+    Profiles,
+    Configs,
+}
+
+/// The profile open in the profile editor: its saved name, the name being typed, its stages.
+struct Editing {
+    profile: String,
+    name: String,
+    stages: Vec<Stage>,
+    /// Camera labels being typed, by camera key.
+    views: std::collections::BTreeMap<String, String>,
+}
+
+impl Editing {
+    fn of(profile: &Profile) -> Self {
+        Self {
+            profile: profile.name.clone(),
+            name: profile.name.clone(),
+            stages: profile.stages.clone(),
+            views: profile.views.clone(),
+        }
+    }
 }
 
 pub struct App {
@@ -88,9 +218,21 @@ pub struct App {
     picker: Option<Picker>,
     page: Page,
     settings_open: bool,
-    settings_tab: SettingsTab,
-    /// A typed video or folder path, added to the list with Add.
-    video_entry: String,
+    tab: Tab,
+    editing: Option<Editing>,
+    /// The message the banner shows and when it appeared (seconds, egui time).
+    banner_since: Option<(String, f64)>,
+    banner_hovered: bool,
+    /// The name typed for a config copy, while that dialog is open.
+    duplicate: Option<String>,
+    /// The height of the floating panel last frame, kept clear below the list.
+    panel_height: f32,
+    /// The profile a camera model is being imported for.
+    camera_model_for: Option<String>,
+    /// A file dialog asked for where no window frame is at hand; opened next.
+    wanted_pick: Option<Selection>,
+    /// The view name being typed on a preview tile.
+    view_draft: String,
 }
 
 impl App {
@@ -103,13 +245,20 @@ impl App {
             picker: None,
             page: Page::Process,
             settings_open: false,
-            settings_tab: SettingsTab::General,
-            video_entry: String::new(),
+            tab: Tab::General,
+            editing: None,
+            banner_since: None,
+            banner_hovered: false,
+            duplicate: None,
+            panel_height: 120.0,
+            camera_model_for: None,
+            wanted_pick: None,
+            view_draft: String::new(),
         }
     }
 
-    fn busy(&self) -> bool {
-        self.engine.busy() || self.picker.is_some()
+    fn idle(&self) -> bool {
+        self.engine.idle() && self.picker.is_none()
     }
 
     fn choose(&mut self, selection: Selection, frame: &eframe::Frame) {
@@ -121,12 +270,12 @@ impl App {
         let result = match selection {
             Selection::RecordingFolder => picked_one(
                 dialog
-                    .set_title("Recording folder")
+                    .set_title("Choose a Folder")
                     .set_directory(self.engine.recording_dir())
                     .pick_folder(),
             ),
             Selection::OutputFolder => {
-                let dialog = dialog.set_title("Save results in");
+                let dialog = dialog.set_title("Choose a Folder");
                 let dialog = match self.engine.output_dir() {
                     Some(dir) if dir.is_dir() => dialog.set_directory(dir),
                     _ => dialog,
@@ -137,30 +286,31 @@ impl App {
                 let exts = crate::data::video::VIDEO_EXT.map(|e| &e[1..]);
                 picked_many(
                     dialog
-                        .set_title("Add videos")
+                        .set_title("Add Videos")
                         .add_filter("Video", &exts)
                         .pick_files(),
                 )
             }
-            Selection::VideoFolders => {
-                picked_many(dialog.set_title("Add folders of videos").pick_folders())
-            }
-            Selection::Calibration => picked_one(
+            Selection::VideoFolders => picked_many(dialog.set_title("Add Folders").pick_folders()),
+            Selection::CameraModel => picked_one(
                 dialog
-                    .add_filter("Camera calibration", &["json"])
+                    .set_title("Import Camera Model")
+                    .add_filter("Camera model", &["json"])
                     .pick_file(),
             ),
             Selection::Model => picked_one(
                 dialog
+                    .set_title("Import Model")
                     .add_filter("Checkpoint", &MODEL_EXTENSIONS)
                     .pick_file(),
             ),
             Selection::Config => picked_one(
                 dialog
+                    .set_title("Import Config")
                     .add_filter("Pipeline config", &CONFIG_EXTENSIONS)
                     .pick_file(),
             ),
-            Selection::ImportFolder => picked_one(dialog.set_title("Import folder").pick_folder()),
+            Selection::ImportFolder => picked_one(dialog.set_title("Import Folder").pick_folder()),
         };
         self.picker = Some(Picker { selection, result });
     }
@@ -189,253 +339,556 @@ impl App {
         let Some(path) = paths.into_iter().next() else {
             return;
         };
+        if let Selection::CameraModel = selection {
+            if let Some(profile) = self.camera_model_for.take() {
+                self.engine.import_camera_model(&path, &profile);
+            }
+            return;
+        }
+        let engine = &mut self.engine;
         match selection {
             Selection::RecordingFolder => {
-                self.engine.settings.recordings = Some(path);
-                self.engine.save();
+                engine.settings.recordings = Some(path);
+                engine.save();
             }
             Selection::OutputFolder => {
-                self.engine.settings.output = Some(path);
-                self.engine.save();
+                engine.settings.output = Some(path);
+                engine.save();
             }
-            Selection::Calibration => self.engine.cameras_json = Some(path),
-            Selection::Model => self.engine.import(ImportKind::Model, path),
-            Selection::Config => self.engine.import(ImportKind::Config, path),
-            Selection::ImportFolder => self.engine.import(ImportKind::Folder, path),
-            Selection::Videos | Selection::VideoFolders => unreachable!(),
+            Selection::Model => engine.import(ImportKind::Model, path),
+            Selection::Config => engine.import(ImportKind::Config, path),
+            Selection::ImportFolder => engine.import(ImportKind::Folder, path),
+            Selection::Videos | Selection::VideoFolders | Selection::CameraModel => unreachable!(),
         }
     }
 
-    fn toolbar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("toolbar")
-            .frame(
-                egui::Frame::side_top_panel(&ctx.style())
-                    .inner_margin(egui::Margin::symmetric(16.0, 10.0)),
-            )
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("AnimalPose").size(17.0).strong());
-                    ui.add_space(16.0);
-                    for (page, label) in [(Page::Live, "Live"), (Page::Process, "Process")] {
-                        let selected = self.page == page;
-                        let text = RichText::new(label).size(14.0);
-                        if ui.add(egui::SelectableLabel::new(selected, text)).clicked() {
-                            self.page = page;
-                        }
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let hint = format!("Settings ({})", ctx.format_shortcut(&SETTINGS));
-                        if ui.button("⚙ Settings").on_hover_text(hint).clicked() {
-                            self.settings_open = true;
-                        }
-                        if let Some(job) = &self.engine.processing {
-                            let snapshot = job.control.snapshot();
-                            ui.add(
-                                egui::ProgressBar::new(snapshot.fraction())
-                                    .desired_width(140.0)
-                                    .show_percentage(),
-                            );
-                        }
-                    });
-                });
-            });
-    }
-
-    fn status_bar(&mut self, ctx: &egui::Context) {
-        if self.engine.status.is_empty() {
-            return;
+    fn report(&mut self, result: Result<()>) {
+        if let Err(err) = result {
+            self.engine.status = format!("{err:#}");
         }
-        egui::TopBottomPanel::bottom("status")
-            .frame(
-                egui::Frame::side_top_panel(&ctx.style())
-                    .inner_margin(egui::Margin::symmetric(16.0, 8.0)),
-            )
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    if ui.small_button("🗙").on_hover_text("Dismiss").clicked() {
-                        self.engine.status.clear();
+    }
+
+    // MARK: Sidebar
+
+    fn sidebar(&mut self, ui: &mut Ui) {
+        let pal = Palette::of(ui);
+        ui.add_space(TOOLBAR - 8.0);
+        for (page, icon, title, badge) in [
+            (Page::Process, "🎞", "Process", self.engine.videos.len()),
+            (Page::Live, "📹", "Live", self.engine.workers.len()),
+        ] {
+            if sidebar_row(ui, &pal, icon, title, self.page == page, badge).clicked() {
+                self.page = page;
+            }
+        }
+        ui.add_space(10.0);
+        self.profile_menu(ui, &pal);
+        let recent = self.engine.settings.recent_results.clone();
+        if !recent.is_empty() {
+            section_header(ui, &pal, "Results");
+            for path in recent.iter().take(5) {
+                let row = sidebar_row(ui, &pal, "🗀", &file_name(path), false, 0)
+                    .on_hover_text(path.display().to_string());
+                if row.clicked() {
+                    open(path);
+                }
+                row.context_menu(|ui| {
+                    if ui.button("Open").clicked() {
+                        open(path);
+                        ui.close_menu();
                     }
-                    ui.label(&self.engine.status);
+                    let log = path.join("animalpose.log");
+                    if log.is_file() && ui.button("Open Log").clicked() {
+                        open(&log);
+                        ui.close_menu();
+                    }
                 });
-            });
-    }
-
-    fn live_page(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let session = self.engine.session();
-        let idle = self.engine.idle() && self.picker.is_none();
-        egui::SidePanel::left("live")
-            .resizable(true)
-            .default_width(320.0)
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.add_space(8.0);
-                    card(ui, "Sources", |ui| {
-                        ui.add_enabled_ui(idle, |ui| {
-                            for (source, on) in
-                                self.engine.sources.iter().zip(&mut self.engine.selected)
-                            {
-                                ui.checkbox(on, source.name());
-                            }
-                            if self.engine.sources.is_empty() {
-                                ui.label(RichText::new("No cameras found").weak());
-                            }
-                            ui.horizontal(|ui| {
-                                if ui.button("Refresh cameras").clicked() {
-                                    self.engine.refresh_cameras();
-                                }
-                            });
-                            ui.add_enabled(
-                                !self.engine.videos.is_empty(),
-                                egui::Checkbox::new(
-                                    &mut self.engine.playback,
-                                    "Play the first listed video as a source",
-                                ),
-                            );
-                        });
-                        ui.add_enabled_ui(session.is_none() && !self.busy(), |ui| {
-                            let mut live = self.engine.settings.live;
-                            if ui.checkbox(&mut live, "Live pose preview").changed() {
-                                self.engine.set_live(live);
-                            }
-                        });
+            }
+        }
+        if let Some(job) = &self.engine.processing {
+            let snapshot = job.control.snapshot();
+            ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
+                ui.add_space(10.0);
+                pal.glass(14.0)
+                    .inner_margin(egui::Margin::same(12.0))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        let title = if snapshot.total() > 1 {
+                            snapshot.video_label()
+                        } else {
+                            "Processing…".into()
+                        };
+                        ui.label(RichText::new(title).small().strong());
+                        progress(ui, snapshot.fraction(), ACCENT);
                     });
-                    card(ui, "Recording", |ui| self.recording_controls(ui, frame));
-                });
             });
-        egui::CentralPanel::default().show(ctx, |ui| self.preview(ui, session.is_some()));
+        }
     }
 
-    fn recording_controls(&mut self, ui: &mut egui::Ui, frame: &eframe::Frame) {
-        if let Some(session) = self.engine.session() {
-            let (phase, elapsed, remaining) = session.position();
-            ui.label(
-                RichText::new(format!("● {}", session.label(phase)))
-                    .color(Color32::from_rgb(255, 69, 58))
-                    .strong(),
-            );
-            if let Phase::Timed(i) = phase {
-                let seconds = f64::from(session.stages[i].seconds);
-                ui.add(
-                    egui::ProgressBar::new((1.0 - remaining.as_secs_f64() / seconds) as f32)
-                        .text(format!("{:.1} s remaining", remaining.as_secs_f64())),
+    fn profile_menu(&mut self, ui: &mut Ui, pal: &Palette) {
+        let active = self.engine.settings.profile.clone().unwrap_or_default();
+        let enabled = self.idle();
+        // One line: "Profile" on the left, the profile in use (a menu) on the right.
+        let response = ui
+            .add_enabled_ui(enabled, |ui| {
+                let row = sidebar_row(ui, pal, "👤", "Profile", false, 0);
+                let label_end = row.rect.left() + 34.0 + 56.0;
+                let mut job = egui::text::LayoutJob::simple_singleline(
+                    format!("{active} ⏷"),
+                    FontId::proportional(13.0),
+                    pal.secondary,
                 );
+                job.wrap = egui::text::TextWrapping::truncate_at_width(
+                    (row.rect.right() - 10.0 - label_end).max(20.0),
+                );
+                let galley = ui.painter().layout_job(job);
+                ui.painter().galley(
+                    egui::pos2(
+                        row.rect.right() - 10.0 - galley.size().x,
+                        row.rect.center().y - galley.size().y / 2.0,
+                    ),
+                    galley,
+                    pal.secondary,
+                );
+                row
+            })
+            .inner
+            .on_hover_text(active.as_str());
+        let id = ui.make_persistent_id("profile-menu");
+        if response.clicked() {
+            ui.memory_mut(|m| m.toggle_popup(id));
+        }
+        let mut chosen = None;
+        let mut edit = false;
+        egui::popup_below_widget(
+            ui,
+            id,
+            &response,
+            egui::PopupCloseBehavior::CloseOnClick,
+            |ui| {
+                ui.set_min_width(180.0);
+                for profile in &self.engine.profiles {
+                    if menu_check(ui, &profile.name, profile.name == active) {
+                        chosen = Some(profile.name.clone());
+                    }
+                }
+                ui.separator();
+                if ui.button("Edit Profiles…").clicked() {
+                    edit = true;
+                }
+            },
+        );
+        if let Some(name) = chosen {
+            self.engine.select_profile(&name);
+        }
+        if edit {
+            self.settings_open = true;
+            self.tab = Tab::Profiles;
+        }
+    }
+
+    // MARK: Toolbar and banner
+
+    fn toolbar(&mut self, ui: &mut Ui, frame: &eframe::Frame) {
+        let pal = Palette::of(ui);
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), TOOLBAR), Sense::hover());
+        ui.painter().hline(
+            rect.x_range(),
+            rect.bottom() - 0.5,
+            Stroke::new(1.0, pal.separator),
+        );
+        let mut bar = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect.shrink2(vec2(18.0, 8.0)))
+                .layout(Layout::left_to_right(Align::Center)),
+        );
+        let (title, subtitle) = match self.page {
+            Page::Process => (
+                "Process",
+                match self.engine.videos.len() {
+                    0 => String::new(),
+                    1 => "1 Video".into(),
+                    n => format!("{n} Videos"),
+                },
+            ),
+            Page::Live => ("Live", String::new()),
+        };
+        bar.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.label(RichText::new(title).size(15.0).strong());
+            if !subtitle.is_empty() {
+                ui.label(RichText::new(subtitle).size(11.0).color(pal.secondary));
             }
-            ui.label(format!("{:.1} s recorded", elapsed.as_secs_f64()));
-            ui.label(RichText::new("Raw preview during recording").weak());
-            ui.horizontal_wrapped(|ui| {
-                if matches!(phase, Phase::Waiting(_))
-                    && ui.button("Continue to next stage").clicked()
-                {
-                    self.engine.continue_stage();
+        });
+        bar.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let idle = self.idle();
+            match self.page {
+                Page::Process => {
+                    if icon_button(ui, &pal, "🗑", idle && !self.engine.videos.is_empty())
+                        .on_hover_text("Clear List")
+                        .clicked()
+                    {
+                        self.engine.videos.clear();
+                    }
+                    let add =
+                        icon_button(ui, &pal, "➕", idle).on_hover_text("Add Videos or Folders");
+                    let id = ui.make_persistent_id("add-menu");
+                    if add.clicked() {
+                        ui.memory_mut(|m| m.toggle_popup(id));
+                    }
+                    let mut pick = None;
+                    egui::popup_below_widget(
+                        ui,
+                        id,
+                        &add,
+                        egui::PopupCloseBehavior::CloseOnClick,
+                        |ui| {
+                            ui.set_min_width(150.0);
+                            if ui.button("Videos…").clicked() {
+                                pick = Some(Selection::Videos);
+                            }
+                            if ui.button("Folders…").clicked() {
+                                pick = Some(Selection::VideoFolders);
+                            }
+                        },
+                    );
+                    if let Some(selection) = pick {
+                        self.choose(selection, frame);
+                    }
+                    if !self.engine.last_recording.is_empty()
+                        && glass_button(ui, &pal, "Analyze Recording", idle).clicked()
+                    {
+                        self.engine.analyze_last();
+                    }
                 }
-                if ui.button("Stop and save").clicked() {
-                    self.engine.stop_recording();
+                Page::Live => {
+                    if icon_button(ui, &pal, "🔄", idle)
+                        .on_hover_text("Refresh Cameras")
+                        .clicked()
+                    {
+                        self.engine.refresh_cameras();
+                    }
                 }
-            });
+            }
+        });
+    }
+
+    fn banner(&mut self, ctx: &egui::Context, area: Rect) {
+        if self.engine.status.is_empty() {
+            self.banner_since = None;
             return;
         }
-        let busy = self.busy();
-        let running = !self.engine.workers.is_empty();
-        let ready = self.engine.sources_ready();
-        ui.add_enabled_ui(!busy, |ui| {
-            path_row(
-                ui,
-                "Saved in",
-                &self.engine.recording_dir(),
-                self.engine.settings.recordings.is_none(),
-            );
-            if ui.button("Change…").clicked() {
-                self.choose(Selection::RecordingFolder, frame);
+        // Five seconds on screen, then a 0.4 s fade; the clock waits while the pointer is on it.
+        let now = ctx.input(|i| i.time);
+        match &mut self.banner_since {
+            Some((text, since)) if *text == self.engine.status => {
+                if self.banner_hovered {
+                    *since = now;
+                }
             }
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                if running {
-                    if ui.button("Stop preview").clicked() {
-                        self.engine.stop_sources(false);
+            slot => *slot = Some((self.engine.status.clone(), now)),
+        }
+        let elapsed = now - self.banner_since.as_ref().map_or(now, |(_, t)| *t);
+        let opacity = (1.0 - (elapsed - BANNER_SECONDS) / BANNER_FADE).clamp(0.0, 1.0) as f32;
+        if opacity <= 0.0 {
+            self.engine.status.clear();
+            self.engine.result = None;
+            self.banner_since = None;
+            return;
+        }
+        if elapsed >= BANNER_SECONDS {
+            ctx.request_repaint();
+        } else {
+            ctx.request_repaint_after(Duration::from_secs_f64(BANNER_SECONDS - elapsed));
+        }
+        let pal = Palette::new(ctx.style().visuals.dark_mode);
+        let status = self.engine.status.to_lowercase();
+        let failed = ["fail", "cannot", "could not", "incomplete", "install"]
+            .iter()
+            .any(|w| status.contains(w));
+        let shown = egui::Area::new(Id::new("status-banner"))
+            .order(egui::Order::Foreground)
+            .pivot(Align2::CENTER_TOP)
+            .fixed_pos(egui::pos2(area.center().x, area.top() + TOOLBAR + 12.0))
+            .show(ctx, |ui| {
+                ui.set_opacity(opacity);
+                pal.glass(16.0)
+                    .inner_margin(egui::Margin::symmetric(16.0, 10.0))
+                    .show(ui, |ui| {
+                        ui.set_max_width(area.width().min(640.0) - 40.0);
+                        ui.horizontal(|ui| {
+                            let (icon, color) = if failed {
+                                ("⚠", ORANGE)
+                            } else {
+                                ("ℹ", ACCENT)
+                            };
+                            ui.label(RichText::new(icon).color(color).size(15.0));
+                            ui.add(egui::Label::new(&self.engine.status).wrap());
+                            if let Some(result) = self.engine.result.clone() {
+                                if glass_button(ui, &pal, "Open", true)
+                                    .on_hover_text(result.display().to_string())
+                                    .clicked()
+                                {
+                                    open(&result);
+                                }
+                            }
+                            let close =
+                                egui::Button::new(RichText::new("✖").size(11.0)).frame(false);
+                            if ui.add(close).on_hover_text("Dismiss").clicked() {
+                                self.engine.status.clear();
+                                self.engine.result = None;
+                            }
+                        });
+                    });
+            });
+        self.banner_hovered = shown.response.contains_pointer();
+    }
+
+    // MARK: Process
+
+    fn process_body(&mut self, ui: &mut Ui, frame: &eframe::Frame) {
+        let pal = Palette::of(ui);
+        if self.engine.videos.is_empty() {
+            let note = "Drop videos or folders here.";
+            if empty_state(
+                ui,
+                &pal,
+                "🎞",
+                "No Videos",
+                note,
+                Some("Add…"),
+                self.panel_height,
+            ) {
+                self.choose(Selection::Videos, frame);
+            }
+            return;
+        }
+        let idle = self.idle();
+        let mut remove = None;
+        let active = self
+            .engine
+            .processing
+            .as_ref()
+            .map(|job| job.control.current())
+            .unwrap_or_default();
+        let groups = self.engine.view_groups();
+        let videos = &self.engine.videos;
+        let mut show = |ui: &mut Ui, index: usize, camera: Option<&str>| {
+            let Some(video) = videos.get(index) else {
+                return;
+            };
+            let is_active = !active.is_empty() && display_name(video) == active;
+            let (row, removed) = video_row(ui, &pal, video, is_active, idle, camera);
+            if removed {
+                remove = Some(index);
+            }
+            row.context_menu(|ui| {
+                if ui.button("Show in Folder").clicked() {
+                    open(video.parent().unwrap_or(video));
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.add_enabled(idle, egui::Button::new("Remove")).clicked() {
+                    remove = Some(index);
+                    ui.close_menu();
+                }
+            });
+        };
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(6.0);
+            match &groups {
+                Some(groups) => {
+                    for group in groups {
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(14.0);
+                            ui.label(
+                                RichText::new(&group.title)
+                                    .size(11.5)
+                                    .strong()
+                                    .color(pal.secondary),
+                            );
+                            if group.videos.len() > 1 && group.error.is_none() {
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    ui.add_space(14.0);
+                                    let views = format!("{} Views", group.videos.len());
+                                    ui.label(RichText::new(views).size(11.5).color(pal.secondary));
+                                });
+                            }
+                        });
+                        for (index, camera) in &group.videos {
+                            show(ui, *index, camera.as_deref());
+                        }
+                        if let Some(error) = &group.error {
+                            ui.horizontal(|ui| {
+                                ui.add_space(14.0);
+                                ui.label(
+                                    RichText::new(format!("⚠ {error}")).size(11.5).color(ORANGE),
+                                );
+                            });
+                        }
                     }
-                } else if ui.add(primary("Start preview")).clicked() {
-                    self.engine.start_preview();
                 }
-                if ui
-                    .add_enabled(ready, egui::Button::new("● Record"))
-                    .clicked()
-                {
-                    self.engine.start_recording(false);
+                None => {
+                    for index in 0..videos.len() {
+                        show(ui, index, None);
+                    }
                 }
-                if ui
-                    .add_enabled(
-                        ready && !self.engine.settings.stages.is_empty(),
-                        egui::Button::new("Timed recording"),
-                    )
-                    .on_hover_text("Runs the protocol stages from Settings")
-                    .clicked()
-                {
-                    self.engine.start_recording(true);
+            }
+            ui.add_space(self.panel_height + 24.0);
+        });
+        if let Some(index) = remove {
+            self.engine.remove_video(index);
+        }
+    }
+
+    fn process_panel(&mut self, ui: &mut Ui, frame: &eframe::Frame) {
+        let pal = Palette::of(ui);
+        if let Some(job) = &self.engine.processing {
+            let snapshot = job.control.snapshot();
+            let current = job.control.current();
+            let batch = snapshot.total() > 1;
+            if batch {
+                ui.label(RichText::new(snapshot.video_label()).strong());
+                progress(ui, snapshot.fraction(), ACCENT);
+                ui.add_space(2.0);
+            }
+            ui.horizontal(|ui| {
+                let size = if batch { 12.5 } else { 13.5 };
+                ui.label(RichText::new(&current).size(size));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let status = match snapshot.mode {
+                        ProcessingMode::Pausing | ProcessingMode::Paused => "Paused".to_owned(),
+                        ProcessingMode::Stopping => "Stopping…".to_owned(),
+                        ProcessingMode::Running => snapshot.stage_label(),
+                    };
+                    ui.label(RichText::new(status).color(pal.secondary));
+                });
+            });
+            if batch {
+                progress(ui, snapshot.clip_fraction(), pal.secondary);
+            } else {
+                progress(ui, snapshot.fraction(), ACCENT);
+            }
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let enabled = snapshot.mode != ProcessingMode::Stopping;
+                    if glass_button(ui, &pal, "Stop", enabled).clicked() {
+                        self.engine.stop_processing();
+                    }
+                    let pause = if snapshot.mode == ProcessingMode::Running {
+                        "Pause"
+                    } else {
+                        "Resume"
+                    };
+                    if glass_button(ui, &pal, pause, enabled).clicked() {
+                        self.engine.pause_or_resume();
+                    }
+                });
+            });
+            separator(ui, &pal);
+            ui.ctx().request_repaint_after(Duration::from_millis(100));
+        }
+        let idle = self.idle();
+        ui.horizontal(|ui| {
+            ui.label("Save To");
+            ui.add_enabled_ui(idle, |ui| {
+                let path = self.engine.output_dir();
+                let custom = self.engine.settings.output.is_some();
+                match folder_menu(
+                    ui,
+                    &pal,
+                    "save-to",
+                    path.as_deref(),
+                    custom,
+                    "Next to Video",
+                ) {
+                    Some(FolderChoice::Default) => {
+                        self.engine.settings.output = None;
+                        self.engine.save();
+                    }
+                    Some(FolderChoice::Other) => self.choose(Selection::OutputFolder, frame),
+                    None => {}
+                }
+            });
+            ui.add_space(14.0);
+            ui.label("Multiview");
+            let has_model = self.engine.settings.camera_model.is_some();
+            let mut multiview = self.engine.settings.multiview;
+            let toggled = ui
+                .add_enabled_ui(idle && (has_model || multiview), |ui| {
+                    switch(ui, &mut multiview)
+                })
+                .inner
+                .on_hover_text("Fuse Each Folder’s Views with the Camera Model")
+                .on_disabled_hover_text("Set a Camera Model in the Profile");
+            if toggled.changed() {
+                self.engine.set_multiview(multiview);
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let ffmpeg = crate::data::video::ffmpeg_available();
+                let enabled = idle && !self.engine.videos.is_empty() && ffmpeg;
+                if prominent_button(ui, "Process", enabled, ACCENT).clicked() {
+                    self.engine.process_videos();
+                }
+                if !ffmpeg {
+                    ui.label(RichText::new("⚠ FFmpeg Not Installed").color(ORANGE));
                 }
             });
         });
     }
 
-    fn preview(&mut self, ui: &mut egui::Ui, recording: bool) {
+    // MARK: Live
+
+    fn live_body(&mut self, ui: &mut Ui) {
+        let pal = Palette::of(ui);
         let count = self.engine.workers.len();
         self.textures.resize_with(count, || None);
         if count == 0 {
-            ui.centered_and_justified(|ui| {
-                ui.label(
-                    RichText::new("Select a camera and press Start preview")
-                        .size(16.0)
-                        .weak(),
-                );
-            });
+            let note = if self.engine.sources.is_empty() {
+                "No cameras found."
+            } else {
+                "Choose a source below."
+            };
+            empty_state(ui, &pal, "📹", "No Preview", note, None, self.panel_height);
             return;
         }
-        let columns = (count as f32).sqrt().ceil() as usize;
-        let spacing = ui.spacing().item_spacing.x;
-        let width = (ui.available_width() - spacing * (columns - 1) as f32) / columns as f32;
+        let recording = self.engine.session().is_some();
+        let spacing = 16.0;
+        let available = ui.available_width() - 32.0;
+        let columns = ((available / 360.0).floor().max(1.0) as usize).min(count);
+        let width = (available - spacing * (columns - 1) as f32) / columns as f32;
         egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("previews")
-                .num_columns(columns)
-                .spacing([spacing, spacing])
-                .show(ui, |ui| {
-                    for index in 0..count {
-                        ui.vertical(|ui| {
-                            ui.set_width(width);
-                            self.tile(ui, index, width, recording);
-                        });
-                        if (index + 1) % columns == 0 {
-                            ui.end_row();
-                        }
+            ui.add_space(16.0);
+            let indices: Vec<usize> = (0..count).collect();
+            for row in indices.chunks(columns) {
+                ui.horizontal(|ui| {
+                    ui.add_space(16.0);
+                    ui.spacing_mut().item_spacing.x = spacing;
+                    for &index in row {
+                        self.tile(ui, &pal, index, width, recording);
                     }
                 });
+                ui.add_space(spacing);
+            }
+            ui.add_space(self.panel_height + 24.0);
         });
     }
 
-    fn tile(&mut self, ui: &mut egui::Ui, index: usize, width: f32, recording: bool) {
-        let worker = &self.engine.workers[index];
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(worker.source.name()).strong());
-            if recording {
-                ui.label(RichText::new("● REC").color(Color32::from_rgb(255, 69, 58)));
-            }
-        });
-        if let Some(error) = worker.capture_error.lock().unwrap().as_deref() {
-            ui.colored_label(Color32::LIGHT_RED, error);
-        }
-        if !recording && self.engine.settings.live {
-            if let Some(error) = worker.preview_error.lock().unwrap().as_deref() {
-                ui.label(RichText::new(error).weak());
-            }
-        }
-        let ended = worker.ended.load(std::sync::atomic::Ordering::Acquire);
+    fn tile(&mut self, ui: &mut Ui, pal: &Palette, index: usize, width: f32, recording: bool) {
+        let height = width * 3.0 / 4.0;
+        let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+        ui.painter()
+            .rect_filled(rect, 18.0, Color32::from_black_alpha(220));
         let known = self.textures[index].as_ref().map(|(key, _)| *key);
         let preview = self.engine.preview(index, known);
-        if let Some(preview) = &preview {
-            if let Some(rgba) = &preview.rgba {
-                let image = egui::ColorImage::from_rgba_unmultiplied(preview.size, rgba);
+        if let Some(p) = &preview {
+            if let Some(rgba) = &p.rgba {
+                let image = egui::ColorImage::from_rgba_unmultiplied(p.size, rgba);
                 match &mut self.textures[index] {
                     Some((key, texture)) => {
                         texture.set(image, egui::TextureOptions::LINEAR);
-                        *key = preview.key;
+                        *key = p.key;
                     }
                     slot => {
                         let texture = ui.ctx().load_texture(
@@ -443,526 +896,1456 @@ impl App {
                             image,
                             egui::TextureOptions::LINEAR,
                         );
-                        *slot = Some((preview.key, texture));
+                        *slot = Some((p.key, texture));
                     }
                 }
             }
         }
+        let worker = &self.engine.workers[index];
         if let Some((_, texture)) = &self.textures[index] {
             let size = texture.size_vec2();
-            ui.add(egui::Image::new((texture.id(), size * (width / size.x))).rounding(10.0));
-            if let Some((animals, ms)) = preview.and_then(|p| p.analysis) {
-                ui.label(RichText::new(format!("{animals} animals · {ms:.0} ms")).weak());
+            let scale = (width / size.x).min(height / size.y);
+            let fit = Rect::from_center_size(rect.center(), size * scale);
+            let corner = if (fit.height() - height).abs() < 1.0 && (fit.width() - width).abs() < 1.0
+            {
+                18.0
+            } else {
+                0.0
+            };
+            egui::Image::new((texture.id(), fit.size()))
+                .rounding(corner)
+                .paint_at(ui, fit);
+        } else if !worker.ended.load(std::sync::atomic::Ordering::Acquire) {
+            ui.put(
+                Rect::from_center_size(rect.center(), vec2(24.0, 24.0)),
+                egui::Spinner::new().color(Color32::WHITE),
+            );
+        }
+        // Badges: the view and source on top, the analysis and errors at the bottom.
+        let dot = recording.then_some(RED);
+        let name = worker.source.name();
+        let mut bottom = rect.left_bottom() + vec2(10.0, -10.0);
+        let error = worker.capture_error.lock().unwrap().clone().or_else(|| {
+            if recording {
+                None
+            } else {
+                worker.preview_error.lock().unwrap().clone()
             }
-        } else if !ended {
-            ui.label(RichText::new("Waiting for frames…").weak());
+        });
+        if let Some(error) = error {
+            let text = format!("⚠ {error}");
+            let badge = glass_capsule(ui, pal, bottom, Align2::LEFT_BOTTOM, &text, None, 11.5);
+            bottom.y = badge.top() - 6.0;
+        }
+        if let Some((animals, ms)) = preview.and_then(|p| p.analysis) {
+            let s = if animals == 1 { "" } else { "s" };
+            let text = format!("{animals} animal{s} · {ms:.0} ms");
+            glass_capsule(ui, pal, bottom, Align2::LEFT_BOTTOM, &text, None, 11.5);
+        }
+        self.view_badge(ui, pal, index, rect, &name, dot, recording);
+    }
+
+    /// The view a camera records as, on its tile; click to name it, or with a camera model to
+    /// choose which of its cameras this is.
+    #[allow(clippy::too_many_arguments)]
+    fn view_badge(
+        &mut self,
+        ui: &mut Ui,
+        pal: &Palette,
+        index: usize,
+        tile: Rect,
+        source: &str,
+        dot: Option<Color32>,
+        recording: bool,
+    ) {
+        let view = self.engine.views().get(index).cloned().unwrap_or_default();
+        let text = if recording {
+            format!("{view}   {source}")
+        } else {
+            format!("{view} ⏷   {source}")
+        };
+        let anchor = tile.left_top() + vec2(10.0, 10.0);
+        let capsule = glass_capsule(ui, pal, anchor, Align2::LEFT_TOP, &text, dot, 13.0);
+        if recording {
+            return;
+        }
+        let id = ui.make_persistent_id(("view", index));
+        let response = ui
+            .interact(capsule, id.with("badge"), Sense::click())
+            .on_hover_text("View");
+        if response.clicked() {
+            self.view_draft = view.clone();
+            ui.memory_mut(|m| m.toggle_popup(id));
+        }
+        let names = self.engine.camera_names();
+        let mut chosen = None;
+        egui::popup_below_widget(
+            ui,
+            id,
+            &response,
+            egui::PopupCloseBehavior::CloseOnClickOutside,
+            |ui| {
+                ui.set_min_width(170.0);
+                if names.is_empty() {
+                    let field = ui.add(
+                        egui::TextEdit::singleline(&mut self.view_draft)
+                            .hint_text("Camera")
+                            .desired_width(160.0),
+                    );
+                    if !field.has_focus() && !field.lost_focus() && response.clicked() {
+                        field.request_focus();
+                    }
+                    if field.lost_focus() {
+                        chosen = Some(self.view_draft.clone());
+                    }
+                } else {
+                    for camera in &names {
+                        if menu_check(ui, camera, *camera == view) {
+                            chosen = Some(camera.clone());
+                        }
+                    }
+                }
+            },
+        );
+        if let Some(chosen) = chosen {
+            ui.memory_mut(|m| m.close_popup());
+            if chosen.trim() != view {
+                self.engine.set_view(index, &chosen);
+            }
         }
     }
 
-    fn process_page(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.set_max_width(760.0);
-                ui.add_space(8.0);
-                if self.engine.processing.is_some() {
-                    card(ui, "Progress", |ui| self.processing_controls(ui));
-                }
-                let idle = self.engine.idle() && self.picker.is_none();
-                ui.add_enabled_ui(idle, |ui| {
-                    card(ui, "Videos", |ui| self.video_list(ui, frame));
-                    card(ui, "Output", |ui| self.output_controls(ui, frame));
-                    card(ui, "Pipeline", |ui| self.pipeline_summary(ui));
-                    ui.horizontal(|ui| {
-                        let process = match self.engine.videos.len() {
-                            0 | 1 => "Process video".to_owned(),
-                            n => format!("Process {n} videos"),
-                        };
-                        if ui
-                            .add_enabled(!self.engine.videos.is_empty(), primary(&process))
-                            .clicked()
-                        {
-                            self.engine.process_videos();
-                            ui.ctx().request_repaint();
-                        }
-                        if ui
-                            .add_enabled(
-                                !self.engine.last_recording.is_empty(),
-                                egui::Button::new("Analyze last recording"),
-                            )
-                            .on_hover_text("Saves an analysis folder in each recorded stage")
-                            .clicked()
-                        {
-                            self.engine.analyze_last();
-                            ui.ctx().request_repaint();
-                        }
-                    });
+    fn live_panel(&mut self, ui: &mut Ui) {
+        let pal = Palette::of(ui);
+        if let Some(session) = self.engine.session() {
+            let (phase, elapsed, remaining) = session.position();
+            ui.horizontal(|ui| {
+                let pulse = (ui.input(|i| i.time) * 2.0).sin() as f32 * 0.25 + 0.75;
+                ui.label(
+                    RichText::new("⏺")
+                        .color(RED.gamma_multiply(pulse))
+                        .size(15.0),
+                );
+                ui.label(RichText::new(session.label(phase)).strong());
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let secs = elapsed.as_secs();
+                    let clock = format!("{}:{:02}", secs / 60, secs % 60);
+                    ui.label(RichText::new(clock).size(16.0).monospace());
                 });
             });
-        });
-    }
-
-    fn processing_controls(&self, ui: &mut egui::Ui) {
-        let Some(job) = &self.engine.processing else {
-            return;
-        };
-        let snapshot = job.control.snapshot();
-        if snapshot.total() > 1 {
-            // One bar for the videos, one for the frames of the video in progress.
-            ui.add(egui::ProgressBar::new(snapshot.fraction()).text(snapshot.video_label()));
-            let current = job.control.current();
-            if !current.is_empty() {
-                ui.label(RichText::new(current).strong());
+            if let Phase::Timed(i) = phase {
+                let seconds = f64::from(session.stages[i].seconds);
+                progress(ui, (1.0 - remaining.as_secs_f64() / seconds) as f32, ACCENT);
+                let left = format!("{} s", remaining.as_secs_f64().ceil());
+                ui.label(RichText::new(left).color(pal.secondary));
             }
-            ui.add(egui::ProgressBar::new(snapshot.clip_fraction()).text(snapshot.stage_label()));
-        } else {
-            ui.add(egui::ProgressBar::new(snapshot.fraction()).show_percentage());
-            ui.label(snapshot.label());
-        }
-        match snapshot.mode {
-            ProcessingMode::Running => {}
-            ProcessingMode::Pausing => {
-                ui.label("Pausing after the current operation…");
-            }
-            ProcessingMode::Paused => {
-                ui.label("Paused");
-            }
-            ProcessingMode::Stopping => {
-                ui.label("Stopping after the current operation…");
-            }
-        }
-        ui.add_enabled_ui(snapshot.mode != ProcessingMode::Stopping, |ui| {
             ui.horizontal(|ui| {
-                let pause = if snapshot.mode == ProcessingMode::Running {
-                    "Pause"
-                } else {
-                    "Resume"
-                };
-                if ui.button(pause).clicked() {
-                    self.engine.pause_or_resume();
-                }
-                if ui.button("Stop").clicked() {
-                    self.engine.stop_processing();
-                }
-            });
-        });
-        if snapshot.mode != ProcessingMode::Paused {
-            ui.ctx().request_repaint_after(Duration::from_millis(100));
-        }
-    }
-
-    /// The add buttons, a typed path field and the listed videos, each removable.
-    fn video_list(&mut self, ui: &mut egui::Ui, frame: &eframe::Frame) {
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Add videos…").clicked() {
-                self.choose(Selection::Videos, frame);
-            }
-            if ui.button("Add folders…").clicked() {
-                self.choose(Selection::VideoFolders, frame);
-            }
-            if ui
-                .add_enabled(!self.engine.videos.is_empty(), egui::Button::new("Clear"))
-                .clicked()
-            {
-                self.engine.videos.clear();
-            }
-        });
-        let mut submit = false;
-        ui.horizontal(|ui| {
-            let field = ui.add(
-                egui::TextEdit::singleline(&mut self.video_entry)
-                    .hint_text("Or type a video or folder path")
-                    .desired_width((ui.available_width() - 48.0).max(80.0)),
-            );
-            submit |= field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            submit |= ui
-                .add_enabled(
-                    !self.video_entry.trim().is_empty(),
-                    egui::Button::new("Add"),
-                )
-                .clicked();
-        });
-        if submit && !self.video_entry.trim().is_empty() {
-            let path = PathBuf::from(self.video_entry.trim());
-            self.video_entry.clear();
-            self.engine.add_videos([path]);
-        }
-        if self.engine.videos.is_empty() {
-            ui.label(RichText::new("No videos yet. Folders are searched recursively.").weak());
-            return;
-        }
-        let mut remove = None;
-        egui::ScrollArea::vertical()
-            .id_salt("video-list")
-            .max_height(220.0)
-            .auto_shrink([false, true])
-            .show(ui, |ui| {
-                for (index, video) in self.engine.videos.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        if ui
-                            .small_button("🗙")
-                            .on_hover_text("Remove from the list")
-                            .clicked()
-                        {
-                            remove = Some(index);
-                        }
-                        ui.label(display_name(video))
-                            .on_hover_text(video.display().to_string());
-                    });
-                }
-            });
-        if let Some(index) = remove {
-            self.engine.remove_video(index);
-        }
-    }
-
-    fn output_controls(&mut self, ui: &mut egui::Ui, frame: &eframe::Frame) {
-        match self.engine.output_dir() {
-            Some(dir) => path_row(
-                ui,
-                "Results go to",
-                &dir,
-                self.engine.settings.output.is_none(),
-            ),
-            None => {
-                ui.label(RichText::new("Next to the first listed video").weak());
-            }
-        }
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Choose folder…").clicked() {
-                self.choose(Selection::OutputFolder, frame);
-            }
-            if ui
-                .add_enabled(
-                    self.engine.settings.output.is_some(),
-                    egui::Button::new("Next to first video"),
-                )
-                .clicked()
-            {
-                self.engine.settings.output = None;
-                self.engine.save();
-            }
-            if let Some(dir) = self.engine.output_dir() {
-                if ui.button("Show").clicked() {
-                    reveal(&dir);
-                }
-            }
-        });
-        ui.label(
-            RichText::new(
-                "One video: a <name>-analysis folder. Several: one animalpose-batch folder.",
-            )
-            .weak()
-            .small(),
-        );
-    }
-
-    fn pipeline_summary(&mut self, ui: &mut egui::Ui) {
-        let settings = &self.engine.settings;
-        egui::Grid::new("pipeline-summary")
-            .num_columns(2)
-            .spacing([16.0, 4.0])
-            .show(ui, |ui| {
-                ui.label(RichText::new("Config").weak());
-                ui.label(settings.config.as_deref().unwrap_or("Default pipeline"));
-                ui.end_row();
-                for kind in MODEL_KINDS {
-                    let key = kind.as_str();
-                    ui.label(RichText::new(capitalized(key)).weak());
-                    let off =
-                        kind == crate::models::ModelKind::Behavior && !settings.classify_behavior;
-                    ui.label(if off {
-                        "Off"
-                    } else {
-                        settings
-                            .models
-                            .get(key)
-                            .map_or("From config", String::as_str)
-                    });
-                    ui.end_row();
-                }
-            });
-        if ui.link("Change in Settings…").clicked() {
-            self.settings_open = true;
-            self.settings_tab = SettingsTab::Pipeline;
-        }
-    }
-
-    fn settings_window(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let mut open = self.settings_open;
-        egui::Window::new("Settings")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(true)
-            .default_width(520.0)
-            .anchor(egui::Align2::CENTER_TOP, [0.0, 72.0])
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    for (tab, label) in [
-                        (SettingsTab::General, "General"),
-                        (SettingsTab::Pipeline, "Models & config"),
-                        (SettingsTab::Protocol, "Protocol"),
-                    ] {
-                        ui.selectable_value(&mut self.settings_tab, tab, label);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if glass_button(ui, &pal, "Stop", true).clicked() {
+                        self.engine.stop_recording();
+                    }
+                    if matches!(phase, Phase::Waiting(_))
+                        && prominent_button(ui, "Continue", true, ACCENT).clicked()
+                    {
+                        self.engine.continue_stage();
                     }
                 });
-                ui.separator();
-                let enabled = self.engine.idle() && self.picker.is_none();
-                ui.add_enabled_ui(enabled, |ui| match self.settings_tab {
-                    SettingsTab::General => self.general_settings(ui, frame),
-                    SettingsTab::Pipeline => self.library_controls(ui, frame),
-                    SettingsTab::Protocol => self.timer_editor(ui),
-                });
-                if !enabled {
-                    ui.label(RichText::new("Settings are locked while a job runs.").weak());
+            });
+            ui.ctx().request_repaint_after(Duration::from_millis(50));
+            return;
+        }
+        let idle = self.idle();
+        ui.add_enabled_ui(idle, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let engine = &mut self.engine;
+                for (source, on) in engine.sources.iter().zip(&mut engine.selected) {
+                    chip(ui, &pal, &format!("📷 {}", source.name()), on);
+                }
+                if let Some(first) = engine.videos.first() {
+                    let name = format!("🎞 {}", file_name(first));
+                    chip(ui, &pal, &name, &mut engine.playback).on_hover_text("Play as a Camera");
                 }
             });
-        self.settings_open = open;
-    }
-
-    fn general_settings(&mut self, ui: &mut egui::Ui, frame: &eframe::Frame) {
-        ui.label(RichText::new("Processed results").strong());
-        let custom = self.engine.settings.output.is_some();
-        if ui.radio(!custom, "Next to the first video").clicked() && custom {
-            self.engine.settings.output = None;
-            self.engine.save();
-        }
-        ui.horizontal(|ui| {
-            if ui.radio(custom, "In a folder:").clicked() || ui.button("Choose…").clicked() {
-                self.choose(Selection::OutputFolder, frame);
-            }
         });
-        if let Some(dir) = &self.engine.settings.output {
-            ui.label(RichText::new(dir.display().to_string()).monospace().small());
-        }
-        ui.add_space(8.0);
-        ui.label(RichText::new("Recordings").strong());
-        ui.label(
-            RichText::new(self.engine.recording_dir().display().to_string())
-                .monospace()
-                .small(),
-        );
+        separator(ui, &pal);
         ui.horizontal(|ui| {
-            if ui.button("Choose…").clicked() {
-                self.choose(Selection::RecordingFolder, frame);
-            }
+            ui.label("Pose Overlay");
+            let mut live = self.engine.settings.live;
+            let busy = self.engine.busy();
             if ui
-                .add_enabled(
-                    self.engine.settings.recordings.is_some(),
-                    egui::Button::new("Use default"),
-                )
-                .clicked()
+                .add_enabled_ui(!busy, |ui| switch(ui, &mut live))
+                .inner
+                .changed()
             {
-                self.engine.settings.recordings = None;
-                self.engine.save();
+                self.engine.set_live(live);
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if self.engine.workers.is_empty() {
+                    if prominent_button(ui, "▶  Preview", idle, ACCENT).clicked() {
+                        self.engine.start_preview();
+                    }
+                    return;
+                }
+                let ready = self.engine.sources_ready();
+                let timed = ready && !self.engine.settings.stages.is_empty();
+                if prominent_button(ui, "⏱  Timed", timed, RED)
+                    .on_hover_text("Record the Protocol Stages")
+                    .clicked()
+                {
+                    self.engine.start_recording(true);
+                }
+                if glass_button(ui, &pal, "⏺  Record", ready)
+                    .on_hover_text("Record Until Stopped")
+                    .clicked()
+                {
+                    self.engine.start_recording(false);
+                }
+                if glass_button(ui, &pal, "Stop", true).clicked() {
+                    self.engine.stop_sources(false);
+                }
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.engine.recording_name)
+                        .hint_text("Recording Name")
+                        .desired_width(170.0),
+                )
+                .on_hover_text("Names the recording folder");
+            });
+        });
+    }
+
+    // MARK: Settings
+
+    fn settings(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        let id = egui::ViewportId::from_hash_of("settings");
+        let builder = egui::ViewportBuilder::default()
+            .with_title("Settings")
+            .with_inner_size([680.0, 560.0])
+            .with_min_inner_size([560.0, 420.0]);
+        ctx.show_viewport_immediate(id, builder, |ctx, class| {
+            if ctx.input_mut(|i| i.viewport().close_requested() || i.consume_shortcut(&SETTINGS)) {
+                self.settings_open = false;
+            }
+            let pal = Palette::new(ctx.style().visuals.dark_mode);
+            if class == egui::ViewportClass::Embedded {
+                let mut open = self.settings_open;
+                egui::Window::new("Settings")
+                    .open(&mut open)
+                    .default_size([640.0, 520.0])
+                    .show(ctx, |ui| self.settings_body(ui, &pal, frame));
+                self.settings_open &= open;
+            } else {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::none().fill(pal.content))
+                    .show(ctx, |ui| self.settings_body(ui, &pal, frame));
             }
         });
-        ui.add_space(8.0);
-        ui.label(RichText::new("Library").strong());
-        ui.label(
-            RichText::new(self.engine.library.root.display().to_string())
-                .monospace()
-                .small(),
-        );
-        if ui.button("Show in file browser").clicked() {
-            reveal(&self.engine.library.root);
+    }
+
+    fn settings_body(&mut self, ui: &mut Ui, pal: &Palette, frame: &eframe::Frame) {
+        self.settings_tabs(ui, pal);
+        let enabled = self.idle();
+        ui.add_enabled_ui(enabled, |ui| match self.tab {
+            Tab::General => self.general(ui, pal, frame),
+            Tab::Profiles => self.profiles(ui, pal),
+            Tab::Configs => self.configs(ui, pal),
+        });
+        if let Some(selection) = self.wanted_pick.take() {
+            self.choose(selection, frame);
         }
     }
 
-    fn library_controls(&mut self, ui: &mut egui::Ui, frame: &eframe::Frame) {
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Import model…").clicked() {
-                self.choose(Selection::Model, frame);
+    fn settings_tabs(&mut self, ui: &mut Ui, pal: &Palette) {
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 62.0), Sense::hover());
+        ui.painter().rect_filled(rect, 0.0, pal.sidebar);
+        ui.painter().hline(
+            rect.x_range(),
+            rect.bottom(),
+            Stroke::new(1.0, pal.separator),
+        );
+        let tabs = [
+            (Tab::General, "⚙", "General"),
+            (Tab::Profiles, "👤", "Profiles"),
+            (Tab::Configs, "🔧", "Configs"),
+        ];
+        let width = 76.0;
+        let left = rect.center().x - width * tabs.len() as f32 / 2.0;
+        for (i, (tab, icon, title)) in tabs.into_iter().enumerate() {
+            let cell = Rect::from_min_size(
+                egui::pos2(left + width * i as f32, rect.top() + 6.0),
+                vec2(width - 6.0, 50.0),
+            );
+            let response = ui.interact(cell, Id::new(("settings-tab", i)), Sense::click());
+            let selected = self.tab == tab;
+            let fill = if selected {
+                pal.selection
+            } else if response.hovered() {
+                pal.control
+            } else {
+                Color32::TRANSPARENT
+            };
+            ui.painter().rect_filled(cell, 8.0, fill);
+            let color = if selected { ACCENT } else { pal.secondary };
+            ui.painter().text(
+                cell.center_top() + vec2(0.0, 17.0),
+                Align2::CENTER_CENTER,
+                icon,
+                FontId::proportional(20.0),
+                color,
+            );
+            ui.painter().text(
+                cell.center_bottom() - vec2(0.0, 10.0),
+                Align2::CENTER_CENTER,
+                title,
+                FontId::proportional(11.5),
+                if selected { pal.text() } else { pal.secondary },
+            );
+            if response.clicked() {
+                self.tab = tab;
             }
-            if ui.button("Import config…").clicked() {
-                self.choose(Selection::Config, frame);
-            }
-            if ui.button("Import folder…").clicked() {
-                self.choose(Selection::ImportFolder, frame);
-            }
-        });
-        ui.add_space(6.0);
-        let engine = &mut self.engine;
-        let before = engine.settings.config.clone();
-        let configs = engine.library.configs();
-        let mut changed = false;
-        egui::Grid::new("models")
-            .num_columns(2)
-            .spacing([16.0, 8.0])
-            .show(ui, |ui| {
-                ui.label("Pipeline config");
-                egui::ComboBox::from_id_salt("config")
-                    .width(260.0)
-                    .selected_text(before.as_deref().unwrap_or("Default pipeline"))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut engine.settings.config, None, "Default pipeline");
-                        for name in configs {
-                            ui.selectable_value(
-                                &mut engine.settings.config,
-                                Some(name.clone()),
-                                name,
-                            );
+        }
+    }
+
+    fn general(&mut self, ui: &mut Ui, pal: &Palette, frame: &eframe::Frame) {
+        let mut pick = None;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            form(ui, |ui| {
+                group(ui, pal, None, |ui, rows| {
+                    row(ui, pal, rows, "Processed Videos", |ui| {
+                        let custom = self.engine.settings.output.clone();
+                        let path = custom.as_deref();
+                        let custom = path.is_some();
+                        match folder_menu(ui, pal, "processed", path, custom, "Next to Video") {
+                            Some(FolderChoice::Default) => {
+                                self.engine.settings.output = None;
+                                self.engine.save();
+                            }
+                            Some(FolderChoice::Other) => pick = Some(Selection::OutputFolder),
+                            None => {}
                         }
                     });
-                ui.end_row();
-                changed |= before != engine.settings.config;
-                for kind in MODEL_KINDS {
-                    let key = kind.as_str();
-                    let prior = engine.settings.models.get(key).cloned();
-                    let mut chosen = prior.clone();
-                    let enabled = kind != crate::models::ModelKind::Behavior
-                        || engine.settings.classify_behavior;
-                    ui.label(capitalized(key));
-                    ui.add_enabled_ui(enabled, |ui| {
-                        egui::ComboBox::from_id_salt(key)
-                            .width(260.0)
-                            .selected_text(prior.as_deref().unwrap_or("From config"))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut chosen, None, "From config");
-                                for name in engine.library.models(kind) {
-                                    ui.selectable_value(&mut chosen, Some(name.clone()), name);
+                    row(ui, pal, rows, "Recordings", |ui| {
+                        let path = self.engine.recording_dir();
+                        let custom = self.engine.settings.recordings.is_some();
+                        match folder_menu(ui, pal, "recordings", Some(&path), custom, "Default") {
+                            Some(FolderChoice::Default) => {
+                                self.engine.settings.recordings = None;
+                                self.engine.save();
+                            }
+                            Some(FolderChoice::Other) => pick = Some(Selection::RecordingFolder),
+                            None => {}
+                        }
+                    });
+                });
+                group(ui, pal, None, |ui, rows| {
+                    row(ui, pal, rows, "Logs", |ui| {
+                        if glass_button(ui, pal, "Show in Folder", true).clicked() {
+                            open(self.engine.log.dir());
+                        }
+                    });
+                    row(ui, pal, rows, "Library", |ui| {
+                        if glass_button(ui, pal, "Show in Folder", true).clicked() {
+                            open(&self.engine.library.root);
+                        }
+                        let import = glass_button(ui, pal, "Import  ⏷", true);
+                        let id = ui.make_persistent_id("import-menu");
+                        if import.clicked() {
+                            ui.memory_mut(|m| m.toggle_popup(id));
+                        }
+                        egui::popup_below_widget(
+                            ui,
+                            id,
+                            &import,
+                            egui::PopupCloseBehavior::CloseOnClick,
+                            |ui| {
+                                ui.set_min_width(120.0);
+                                if ui.button("Model…").clicked() {
+                                    pick = Some(Selection::Model);
+                                }
+                                if ui.button("Config…").clicked() {
+                                    pick = Some(Selection::Config);
+                                }
+                                if ui.button("Folder…").clicked() {
+                                    pick = Some(Selection::ImportFolder);
+                                }
+                            },
+                        );
+                        if self.engine.importing() {
+                            ui.add(egui::Spinner::new());
+                        }
+                    });
+                });
+            });
+        });
+        if let Some(selection) = pick {
+            self.choose(selection, frame);
+        }
+    }
+
+    fn profiles(&mut self, ui: &mut Ui, pal: &Palette) {
+        let active = self.engine.settings.profile.clone();
+        let wanted = self
+            .editing
+            .as_ref()
+            .map(|e| e.profile.clone())
+            .or_else(|| active.clone());
+        let Some(profile) = wanted
+            .and_then(|name| self.engine.profiles.iter().find(|p| p.name == name))
+            .or_else(|| self.engine.profiles.first())
+            .cloned()
+        else {
+            return;
+        };
+        if self.editing.as_ref().map(|e| &e.profile) != Some(&profile.name) {
+            self.editing = Some(Editing::of(&profile));
+        }
+        let mut copy: Option<String> = None;
+        let mut delete: Option<String> = None;
+        ui.add_space(16.0);
+        ui.horizontal_top(|ui| {
+            ui.add_space(20.0);
+            // The list, with + and − below it.
+            ui.vertical(|ui| {
+                ui.set_width(190.0);
+                let height = (ui.available_height() - 48.0).max(120.0);
+                egui::Frame::none()
+                    .fill(pal.group)
+                    .stroke(Stroke::new(1.0, pal.separator))
+                    .rounding(8.0)
+                    .inner_margin(egui::Margin::same(4.0))
+                    .show(ui, |ui| {
+                        ui.set_min_height(height);
+                        ui.set_width(182.0);
+                        let count = self.engine.profiles.len();
+                        for p in self.engine.profiles.clone() {
+                            let check = if Some(&p.name) == active.as_ref() {
+                                "   ✔"
+                            } else {
+                                ""
+                            };
+                            let title = format!("{}{check}", p.name);
+                            let row = sidebar_row(ui, pal, "", &title, p.name == profile.name, 0);
+                            if row.clicked() {
+                                self.editing = Some(Editing::of(&p));
+                            }
+                            row.context_menu(|ui| {
+                                if ui.button("Duplicate").clicked() {
+                                    copy = Some(p.name.clone());
+                                    ui.close_menu();
+                                }
+                                ui.separator();
+                                if ui
+                                    .add_enabled(count > 1, egui::Button::new("Delete"))
+                                    .clicked()
+                                {
+                                    delete = Some(p.name.clone());
+                                    ui.close_menu();
                                 }
                             });
-                    });
-                    ui.end_row();
-                    if chosen != prior {
-                        changed = true;
-                        if let Some(name) = chosen {
-                            engine.settings.models.insert(key.to_owned(), name);
-                        } else {
-                            engine.settings.models.remove(key);
                         }
-                    }
-                }
-            });
-        changed |= ui
-            .checkbox(
-                &mut engine.settings.classify_behavior,
-                "Classify behavior if available",
-            )
-            .changed();
-        if changed {
-            engine.save();
-        }
-        let mut live = engine.settings.live;
-        if ui.checkbox(&mut live, "Live pose preview").changed() {
-            engine.set_live(live);
-        }
-        ui.add_space(8.0);
-        ui.label(RichText::new("3D calibration").strong());
-        match &self.engine.cameras_json {
-            Some(path) => ui.label(RichText::new(path.display().to_string()).small()),
-            None => ui.label(RichText::new("None: views are analyzed separately").weak()),
-        };
-        ui.horizontal(|ui| {
-            if ui.button("Choose calibration…").clicked() {
-                self.choose(Selection::Calibration, frame);
-            }
-            if ui
-                .add_enabled(
-                    self.engine.cameras_json.is_some(),
-                    egui::Button::new("Clear"),
-                )
-                .clicked()
-            {
-                self.engine.cameras_json = None;
-            }
-        });
-    }
-
-    fn timer_editor(&mut self, ui: &mut egui::Ui) {
-        let mut changed = false;
-        let mut remove = None;
-        let settings = &mut self.engine.settings;
-        let count = settings.stages.len();
-        for (index, stage) in settings.stages.iter_mut().enumerate() {
-            ui.push_id(index, |ui| {
+                    });
                 ui.horizontal(|ui| {
-                    changed |= ui
-                        .add(
-                            egui::TextEdit::singleline(&mut stage.name)
-                                .desired_width(160.0)
-                                .hint_text("Stage name"),
-                        )
-                        .changed();
-                    changed |= ui
-                        .add(
-                            egui::DragValue::new(&mut stage.seconds)
-                                .range(1..=u32::MAX)
-                                .suffix(" s"),
-                        )
-                        .changed();
-                    if index + 1 < count {
-                        changed |= ui
-                            .checkbox(&mut stage.wait_after, "Wait for Continue")
-                            .changed();
+                    if icon_button(ui, pal, "➕", true)
+                        .on_hover_text("New Profile")
+                        .clicked()
+                    {
+                        let mut copy = profile.clone();
+                        copy.name = self.engine.new_profile_name("New Profile");
+                        let result = self.engine.save_profile(None, copy);
+                        self.report(result);
+                        self.editing = None;
                     }
-                    if ui.small_button("🗙").on_hover_text("Remove stage").clicked() {
-                        remove = Some(index);
+                    let can_delete = self.engine.profiles.len() > 1;
+                    if icon_button(ui, pal, "➖", can_delete)
+                        .on_hover_text("Delete Profile")
+                        .clicked()
+                    {
+                        delete = Some(profile.name.clone());
+                    }
+                    if glass_button(ui, pal, "Duplicate", true)
+                        .on_hover_text("Duplicate Profile")
+                        .clicked()
+                    {
+                        copy = Some(profile.name.clone());
                     }
                 });
             });
-        }
-        if let Some(index) = remove {
-            settings.stages.remove(index);
-            changed = true;
-        }
-        if ui.button("Add stage").clicked() {
-            settings.stages.push(recording::Stage {
-                name: "Experiment".into(),
-                seconds: 300,
-                wait_after: false,
+            ui.add_space(8.0);
+            ui.vertical(|ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.set_width(ui.available_width() - 20.0);
+                    self.profile_form(ui, pal, &profile, active.as_deref());
+                });
             });
-            changed = true;
+        });
+        if let Some(name) = delete {
+            let result = self.engine.delete_profile(&name);
+            self.report(result);
+            self.editing = None;
         }
-        if changed {
-            self.engine.save();
+        // The copy is selected; the profile in use stays.
+        if let Some(name) = copy {
+            match self.engine.duplicate_profile(&name) {
+                Ok(new) => {
+                    let saved = self.engine.profiles.iter().find(|p| p.name == new);
+                    self.editing = saved.map(Editing::of);
+                }
+                Err(err) => self.engine.status = format!("{err:#}"),
+            }
+        }
+    }
+
+    fn profile_form(
+        &mut self,
+        ui: &mut Ui,
+        pal: &Palette,
+        profile: &Profile,
+        active: Option<&str>,
+    ) {
+        let mut next = profile.clone();
+        let mut rename = None;
+        let mut use_it = false;
+        let mut stages_changed = false;
+        let configs = self.engine.library.configs();
+        let models: Vec<Vec<String>> = MODEL_KINDS
+            .iter()
+            .map(|kind| self.engine.library.models(*kind))
+            .collect();
+        let camera_models = self.engine.library.camera_models();
+        let in_use = active == Some(profile.name.as_str());
+        let cameras: Option<Result<String, String>> = match &self.engine.cameras {
+            Some(Ok(cams)) if in_use => Some(Ok(cams
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", "))),
+            Some(Err(err)) if in_use => Some(Err(err.clone())),
+            _ => None,
+        };
+        let mut import_model = false;
+        let sources: Vec<(String, String, String)> = self
+            .engine
+            .sources
+            .iter()
+            .map(|s| {
+                (
+                    s.name(),
+                    self.engine.source_key(s),
+                    self.engine.default_view(s),
+                )
+            })
+            .collect();
+        let editing = self.editing.as_mut().expect("a profile is being edited");
+        group(ui, pal, None, |ui, rows| {
+            row(ui, pal, rows, "Name", |ui| {
+                let field =
+                    ui.add(egui::TextEdit::singleline(&mut editing.name).desired_width(220.0));
+                let name = editing.name.trim();
+                if field.lost_focus() && name != profile.name && !name.is_empty() {
+                    rename = Some(name.to_owned());
+                }
+            });
+            if active != Some(profile.name.as_str()) {
+                row(ui, pal, rows, "", |ui| {
+                    use_it = glass_button(ui, pal, "Use", true).clicked();
+                });
+            }
+        });
+        group(ui, pal, Some("Pipeline"), |ui, rows| {
+            row(ui, pal, rows, "Config", |ui| {
+                let label = next.config.as_deref().map_or("Default".into(), stem);
+                egui::ComboBox::from_id_salt("profile-config")
+                    .selected_text(label)
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut next.config, None, "Default");
+                        for c in &configs {
+                            ui.selectable_value(&mut next.config, Some(c.clone()), stem(c));
+                        }
+                    });
+            });
+            for (kind, names) in MODEL_KINDS.iter().zip(&models) {
+                if *kind == crate::models::ModelKind::Arena {
+                    continue; // under Arena, with the camera model
+                }
+                let enabled = *kind != crate::models::ModelKind::Behavior || next.classify_behavior;
+                row(ui, pal, rows, &capitalized(kind.as_str()), |ui| {
+                    ui.add_enabled_ui(enabled, |ui| {
+                        model_picker(ui, &mut next.models, kind.as_str(), names)
+                    });
+                });
+            }
+            row(ui, pal, rows, "Classify Behavior", |ui| {
+                switch(ui, &mut next.classify_behavior);
+            });
+        });
+        group(ui, pal, Some("Arena"), |ui, rows| {
+            let arena = crate::models::ModelKind::Arena;
+            if let Some(names) = MODEL_KINDS
+                .iter()
+                .position(|k| *k == arena)
+                .map(|i| &models[i])
+            {
+                row(ui, pal, rows, "Arena Detector", |ui| {
+                    model_picker(ui, &mut next.models, arena.as_str(), names);
+                });
+            }
+            row(ui, pal, rows, "Camera Model", |ui| {
+                let label = next.camera_model.as_deref().map_or("None".into(), stem);
+                egui::ComboBox::from_id_salt("profile-camera-model")
+                    .selected_text(label)
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut next.camera_model, None, "None");
+                        for m in &camera_models {
+                            ui.selectable_value(&mut next.camera_model, Some(m.clone()), stem(m));
+                        }
+                        ui.separator();
+                        import_model = ui.button("Import…").clicked();
+                    });
+            });
+            match &cameras {
+                Some(Ok(names)) => row(ui, pal, rows, "Views", |ui| {
+                    ui.label(RichText::new(names).color(pal.secondary));
+                }),
+                Some(Err(err)) => row(ui, pal, rows, "", |ui| {
+                    ui.label(RichText::new(format!("⚠ {err}")).color(ORANGE));
+                }),
+                None => {}
+            }
+        });
+        let cameras: Vec<(String, String, String)> = sources
+            .iter()
+            .map(|(name, key, default)| (name.clone(), key.clone(), default.clone()))
+            .collect();
+        if !cameras.is_empty() {
+            group(ui, pal, Some("Camera Names"), |ui, rows| {
+                for (name, key, default) in &cameras {
+                    row(ui, pal, rows, name, |ui| {
+                        let text = editing.views.entry(key.clone()).or_default();
+                        let field = ui.add(
+                            egui::TextEdit::singleline(text)
+                                .hint_text(default.as_str())
+                                .desired_width(200.0),
+                        );
+                        if field.lost_focus() {
+                            match text.trim() {
+                                "" => next.views.remove(key),
+                                label => next.views.insert(key.clone(), label.to_owned()),
+                            };
+                        }
+                    });
+                }
+            });
+        }
+        group(ui, pal, Some("Stages"), |ui, rows| {
+            let count = editing.stages.len();
+            let mut remove = None;
+            for (i, stage) in editing.stages.iter_mut().enumerate() {
+                row(ui, pal, rows, "", |ui| {
+                    let minus = RichText::new("✖").size(11.0).color(pal.secondary);
+                    if ui
+                        .add(egui::Button::new(minus).frame(false))
+                        .on_hover_text("Remove")
+                        .clicked()
+                    {
+                        remove = Some(i);
+                    }
+                    if i + 1 < count {
+                        stages_changed |= switch(ui, &mut stage.wait_after)
+                            .on_hover_text("Wait for Continue")
+                            .changed();
+                        ui.label("Wait");
+                    }
+                    ui.label(RichText::new("s").color(pal.secondary));
+                    stages_changed |= ui
+                        .add(egui::DragValue::new(&mut stage.seconds).range(1..=86_400))
+                        .changed();
+                    let field = ui.add(
+                        egui::TextEdit::singleline(&mut stage.name)
+                            .hint_text(format!("Stage {}", i + 1))
+                            .desired_width(ui.available_width() - 8.0),
+                    );
+                    stages_changed |= field.lost_focus();
+                });
+            }
+            if let Some(i) = remove {
+                editing.stages.remove(i);
+                stages_changed = true;
+            }
+            row(ui, pal, rows, "", |ui| {
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    let plus = RichText::new("➕").color(pal.secondary);
+                    if ui
+                        .add(egui::Button::new(plus).frame(false))
+                        .on_hover_text("Add Stage")
+                        .clicked()
+                    {
+                        editing.stages.push(Stage {
+                            name: String::new(),
+                            seconds: 300,
+                            wait_after: false,
+                        });
+                        stages_changed = true;
+                    }
+                });
+            });
+        });
+        if stages_changed {
+            next.stages = editing.stages.clone();
+        }
+        if import_model {
+            self.camera_model_for = Some(profile.name.clone());
+            self.wanted_pick = Some(Selection::CameraModel);
+        }
+        if use_it {
+            self.engine.select_profile(&profile.name);
+        }
+        if let Some(new) = rename {
+            next.name = new.clone();
+            let result = self.engine.save_profile(Some(&profile.name), next);
+            match &result {
+                Ok(()) => {
+                    let saved = self.engine.profiles.iter().find(|p| p.name == new);
+                    self.editing = saved.map(Editing::of);
+                }
+                Err(_) => {
+                    if let Some(editing) = self.editing.as_mut() {
+                        editing.name = profile.name.clone();
+                    }
+                }
+            }
+            self.report(result);
+        } else if next != *profile {
+            let result = self.engine.save_profile(Some(&profile.name), next);
+            self.report(result);
+        }
+    }
+
+    fn configs(&mut self, ui: &mut Ui, pal: &Palette) {
+        if self.engine.config_form.is_none() {
+            let config = self.engine.settings.config.clone();
+            let result = self.engine.edit_config(config);
+            self.report(result);
+        }
+        let Some((name, form_json)) = self.engine.config_form.clone() else {
+            return;
+        };
+        let configs = self.engine.library.configs();
+        let mut chosen = name.clone();
+        let mut delete = false;
+        ui.add_space(14.0);
+        ui.horizontal(|ui| {
+            ui.add_space(20.0);
+            ui.label("Config");
+            egui::ComboBox::from_id_salt("config-editor")
+                .selected_text(chosen.as_deref().map_or("Default".into(), stem))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut chosen, None, "Default");
+                    for c in &configs {
+                        ui.selectable_value(&mut chosen, Some(c.clone()), stem(c));
+                    }
+                });
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.add_space(20.0);
+                let more = icon_button(ui, pal, "…", true);
+                let id = ui.make_persistent_id("config-actions");
+                if more.clicked() {
+                    ui.memory_mut(|m| m.toggle_popup(id));
+                }
+                egui::popup_below_widget(
+                    ui,
+                    id,
+                    &more,
+                    egui::PopupCloseBehavior::CloseOnClick,
+                    |ui| {
+                        ui.set_min_width(130.0);
+                        if ui.button("Duplicate…").clicked() {
+                            self.duplicate = Some(copy_name(name.as_deref()));
+                        }
+                        if name.is_some() {
+                            ui.separator();
+                            delete = ui.button(RichText::new("Delete").color(RED)).clicked();
+                        }
+                    },
+                );
+            });
+        });
+        if chosen != name {
+            let result = self.engine.edit_config(chosen);
+            self.report(result);
+            return;
+        }
+        if delete {
+            if let Some(n) = &name {
+                let result = self.engine.delete_config(n);
+                self.report(result);
+                return;
+            }
+        }
+        let editable = form_json["editable"].as_bool().unwrap_or(false);
+        let mut commits = Vec::new();
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            form(ui, |ui| {
+                if !editable {
+                    group(ui, pal, None, |ui, rows| {
+                        row(
+                            ui,
+                            pal,
+                            rows,
+                            "The default config can’t be changed.",
+                            |ui| {
+                                if glass_button(ui, pal, "Duplicate…", true).clicked() {
+                                    self.duplicate = Some(copy_name(None));
+                                }
+                            },
+                        );
+                    });
+                }
+                for section in form_json["sections"].as_array().into_iter().flatten() {
+                    let title = section["title"].as_str().unwrap_or_default();
+                    group(ui, pal, Some(title), |ui, rows| {
+                        for field in section["fields"].as_array().into_iter().flatten() {
+                            let label = field["label"].as_str().unwrap_or_default();
+                            row(ui, pal, rows, label, |ui| {
+                                ui.add_enabled_ui(editable, |ui| {
+                                    if let Some(value) = field_control(ui, field) {
+                                        let key = field["key"].as_str().unwrap_or_default();
+                                        commits.push((key.to_owned(), value));
+                                    }
+                                });
+                            });
+                        }
+                    });
+                }
+            });
+        });
+        for (key, value) in commits {
+            let result = self.engine.set_config_value(&key, &value);
+            self.report(result);
+        }
+        self.duplicate_dialog(ui.ctx(), pal, name.as_deref());
+    }
+
+    /// Names a copy of config `source` in a small glass dialog.
+    fn duplicate_dialog(&mut self, ctx: &egui::Context, pal: &Palette, source: Option<&str>) {
+        let Some(new_name) = self.duplicate.as_mut() else {
+            return;
+        };
+        let (mut submit, mut cancel) = (false, false);
+        egui::Window::new("Duplicate Config")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .frame(pal.glass(14.0).inner_margin(egui::Margin::same(16.0)))
+            .show(ctx, |ui| {
+                let field = ui.add(egui::TextEdit::singleline(new_name).desired_width(240.0));
+                submit |= field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let ok = !new_name.trim().is_empty();
+                        submit |= prominent_button(ui, "Duplicate", ok, ACCENT).clicked();
+                        cancel |= glass_button(ui, pal, "Cancel", true).clicked();
+                    });
+                });
+            });
+        if submit && !new_name.trim().is_empty() {
+            let new_name = new_name.clone();
+            let result = self.engine.duplicate_config(source, &new_name);
+            self.report(result);
+            cancel = true;
+        }
+        if cancel {
+            self.duplicate = None;
         }
     }
 }
 
-/// A rounded, filled section with a heading.
-fn card(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
+fn copy_name(source: Option<&str>) -> String {
+    source.map_or("Pipeline".into(), |s| format!("{} Copy", stem(s)))
+}
+
+/// The control for one config setting; returns the value to save when it changed.
+fn field_control(ui: &mut Ui, field: &Value) -> Option<Value> {
+    let kind = field["type"].as_str().unwrap_or_default();
+    let min = field["min"].as_f64().unwrap_or(0.0);
+    let max = field["max"].as_f64().unwrap_or(1.0);
+    let id = Id::new(("config-field", field["key"].as_str().unwrap_or_default()));
+    match kind {
+        "bool" => {
+            let mut on = field["value"].as_bool().unwrap_or(false);
+            switch(ui, &mut on).changed().then(|| json!(on))
+        }
+        "choice" => {
+            let current = field["value"].as_str().unwrap_or_default().to_owned();
+            let mut chosen = current.clone();
+            egui::ComboBox::from_id_salt(id)
+                .selected_text(capitalized(&chosen))
+                .show_ui(ui, |ui| {
+                    for option in field["options"].as_array().into_iter().flatten() {
+                        let option = option.as_str().unwrap_or_default();
+                        ui.selectable_value(&mut chosen, option.to_owned(), capitalized(option));
+                    }
+                });
+            (chosen != current).then(|| json!(chosen))
+        }
+        "float" if max <= 1.0 => {
+            // The slider keeps its value while dragged and saves it when released.
+            let saved = field["value"].as_f64().unwrap_or(0.0);
+            let mut value = ui.data(|d| d.get_temp::<f64>(id)).unwrap_or(saved);
+            ui.label(RichText::new(format!("{value:.2}")).monospace());
+            let response = ui.add(
+                egui::Slider::new(&mut value, min..=max)
+                    .show_value(false)
+                    .trailing_fill(true),
+            );
+            if response.dragged() {
+                ui.data_mut(|d| d.insert_temp(id, value));
+            } else {
+                ui.data_mut(|d| d.remove::<f64>(id));
+            }
+            let step = field["step"].as_f64().unwrap_or(0.01);
+            (response.drag_stopped() || (response.changed() && !response.dragged()))
+                .then(|| json!((value / step).round() * step))
+        }
+        _ => {
+            let mut value = field["value"].as_f64().unwrap_or(0.0);
+            let step = field["step"].as_f64().unwrap_or(1.0);
+            let max = field["max"].as_f64().unwrap_or(1_000_000.0);
+            let decimals = if kind == "float" { 2 } else { 0 };
+            let mut response = ui.add(
+                egui::DragValue::new(&mut value)
+                    .range(min..=max)
+                    .speed(step)
+                    .max_decimals(decimals),
+            );
+            if kind == "limit" {
+                response = response.on_hover_text("0 for No Limit");
+            }
+            let done = response.drag_stopped()
+                || response.lost_focus()
+                || (response.changed() && !response.dragged() && !response.has_focus());
+            done.then(|| json!(value))
+        }
+    }
+}
+
+// MARK: Widgets
+
+fn sidebar_row(
+    ui: &mut Ui,
+    pal: &Palette,
+    icon: &str,
+    title: &str,
+    selected: bool,
+    badge: usize,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 28.0), Sense::click());
+    let hover = ui
+        .ctx()
+        .animate_bool(response.id.with("hover"), response.hovered() && !selected);
+    let fill = if selected {
+        pal.selection
+    } else {
+        pal.control.gamma_multiply(hover)
+    };
+    ui.painter().rect_filled(rect, 6.0, fill);
+    let mut x = rect.left() + 10.0;
+    if !icon.is_empty() {
+        ui.painter().text(
+            egui::pos2(x + 8.0, rect.center().y),
+            Align2::CENTER_CENTER,
+            icon,
+            FontId::proportional(14.0),
+            if selected { ACCENT } else { pal.secondary },
+        );
+        x += 24.0;
+    }
+    let color = if ui.is_enabled() {
+        pal.text()
+    } else {
+        pal.tertiary
+    };
+    ui.painter().text(
+        egui::pos2(x, rect.center().y),
+        Align2::LEFT_CENTER,
+        title,
+        FontId::proportional(13.5),
+        color,
+    );
+    if badge > 0 {
+        let galley = ui.painter().layout_no_wrap(
+            badge.to_string(),
+            FontId::proportional(11.0),
+            pal.secondary,
+        );
+        let pill = Rect::from_center_size(
+            egui::pos2(rect.right() - 18.0, rect.center().y),
+            vec2(galley.size().x + 12.0, 18.0),
+        );
+        ui.painter().rect_filled(pill, 9.0, pal.control);
+        ui.painter()
+            .galley(pill.center() - galley.size() / 2.0, galley, pal.secondary);
+    }
+    response
+}
+
+fn section_header(ui: &mut Ui, pal: &Palette, title: &str) {
+    ui.add_space(14.0);
+    ui.horizontal(|ui| {
+        ui.add_space(10.0);
+        ui.label(
+            RichText::new(title)
+                .size(11.0)
+                .strong()
+                .color(pal.secondary),
+        );
+    });
+    ui.add_space(2.0);
+}
+
+fn separator(ui: &mut Ui, pal: &Palette) {
+    ui.add_space(4.0);
+    let y = ui.cursor().top();
+    ui.painter()
+        .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, pal.separator));
+    ui.add_space(10.0);
+}
+
+/// A capsule button filled with `color`: the main action.
+fn prominent_button(ui: &mut Ui, text: &str, enabled: bool, color: Color32) -> Response {
+    let fill = if enabled {
+        color
+    } else {
+        color.gamma_multiply(0.35)
+    };
+    let button = egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
+        .fill(fill)
+        .rounding(Rounding::same(16.0))
+        .min_size(vec2(88.0, 32.0));
+    ui.add_enabled(enabled, button)
+}
+
+/// A translucent capsule button: a secondary action on glass.
+fn glass_button(ui: &mut Ui, pal: &Palette, text: &str, enabled: bool) -> Response {
+    let button = egui::Button::new(RichText::new(text).size(13.0))
+        .fill(pal.control)
+        .stroke(Stroke::new(1.0, pal.glass_rim.gamma_multiply(0.6)))
+        .rounding(Rounding::same(14.0))
+        .min_size(vec2(0.0, 28.0));
+    ui.add_enabled(enabled, button)
+}
+
+fn icon_button(ui: &mut Ui, pal: &Palette, icon: &str, enabled: bool) -> Response {
+    let button = egui::Button::new(RichText::new(icon).size(15.0).color(pal.secondary))
+        .frame(false)
+        .min_size(vec2(30.0, 28.0));
+    ui.add_enabled(enabled, button)
+}
+
+/// A toggle chip for a source, tinted when on.
+fn chip(ui: &mut Ui, pal: &Palette, text: &str, on: &mut bool) -> Response {
+    let fill = if *on {
+        ACCENT.gamma_multiply(0.85)
+    } else {
+        pal.control
+    };
+    let color = if *on { Color32::WHITE } else { pal.text() };
+    let response = ui.add(
+        egui::Button::new(RichText::new(text).color(color))
+            .fill(fill)
+            .rounding(Rounding::same(8.0))
+            .min_size(vec2(0.0, 28.0)),
+    );
+    if response.clicked() {
+        *on = !*on;
+    }
+    response
+}
+
+/// The macOS switch: a capsule whose knob slides across.
+fn switch(ui: &mut Ui, on: &mut bool) -> Response {
+    let pal = Palette::of(ui);
+    let (rect, mut response) = ui.allocate_exact_size(vec2(38.0, 22.0), Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
+    }
+    let t = ui.ctx().animate_bool_responsive(response.id, *on);
+    let off = if pal.dark {
+        Color32::from_white_alpha(40)
+    } else {
+        Color32::from_black_alpha(30)
+    };
+    let fill = lerp_color(off, ACCENT, t);
+    let fill = if ui.is_enabled() {
+        fill
+    } else {
+        fill.gamma_multiply(0.5)
+    };
+    ui.painter().rect_filled(rect, 11.0, fill);
+    let x = egui::lerp(rect.left() + 11.0..=rect.right() - 11.0, t);
+    let knob = egui::pos2(x, rect.center().y);
+    ui.painter()
+        .circle_filled(knob + vec2(0.0, 0.8), 9.4, Color32::from_black_alpha(40));
+    ui.painter().circle_filled(knob, 9.0, Color32::WHITE);
+    response
+}
+
+fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
+    let mix = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round() as u8;
+    Color32::from_rgba_premultiplied(
+        mix(a.r(), b.r()),
+        mix(a.g(), b.g()),
+        mix(a.b(), b.b()),
+        mix(a.a(), b.a()),
+    )
+}
+
+/// A thin capsule progress bar.
+fn progress(ui: &mut Ui, fraction: f32, color: Color32) {
+    let pal = Palette::of(ui);
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 6.0), Sense::hover());
+    ui.painter().rect_filled(rect, 3.0, pal.control_hover);
+    let mut fill = rect;
+    fill.set_width(rect.width() * fraction.clamp(0.0, 1.0));
+    if fill.width() > 0.0 {
+        ui.painter().rect_filled(fill, 3.0, color);
+    }
+}
+
+/// A text badge on glass, drawn at `anchor`; returns its rectangle.
+fn glass_capsule(
+    ui: &Ui,
+    pal: &Palette,
+    anchor: egui::Pos2,
+    align: Align2,
+    text: &str,
+    dot: Option<Color32>,
+    size: f32,
+) -> Rect {
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), FontId::proportional(size), pal.text());
+    let dot_width = if dot.is_some() { 14.0 } else { 0.0 };
+    let size = vec2(galley.size().x + 22.0 + dot_width, galley.size().y + 10.0);
+    let rect = align.anchor_size(anchor, size);
+    let radius = rect.height() / 2.0;
+    let shadow = egui::epaint::Shadow {
+        offset: vec2(0.0, 3.0),
+        blur: 10.0,
+        spread: 0.0,
+        color: Color32::from_black_alpha(60),
+    };
+    ui.painter().add(shadow.as_shape(rect, radius));
+    ui.painter().rect_filled(rect, radius, pal.glass);
+    ui.painter()
+        .rect_stroke(rect, radius, Stroke::new(1.0, pal.glass_rim));
+    let mut x = rect.left() + 11.0;
+    if let Some(color) = dot {
+        ui.painter()
+            .circle_filled(egui::pos2(x + 4.0, rect.center().y), 4.0, color);
+        x += dot_width;
+    }
+    let top = rect.center().y - galley.size().y / 2.0;
+    ui.painter().galley(egui::pos2(x, top), galley, pal.text());
+    rect
+}
+
+/// The empty view of a page; returns true when its button was pressed.
+fn empty_state(
+    ui: &mut Ui,
+    pal: &Palette,
+    icon: &str,
+    title: &str,
+    note: &str,
+    button: Option<&str>,
+    bottom: f32,
+) -> bool {
+    let area = ui.available_rect_before_wrap();
+    let center = egui::pos2(area.center().x, area.top() + (area.height() - bottom) / 2.0);
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(Rect::from_center_size(
+                center,
+                vec2(area.width().min(420.0), 200.0),
+            ))
+            .layout(Layout::top_down(Align::Center)),
+    );
+    child.label(RichText::new(icon).size(44.0).color(pal.tertiary));
+    child.add_space(8.0);
+    child.label(
+        RichText::new(title)
+            .size(17.0)
+            .strong()
+            .color(pal.secondary),
+    );
+    child.label(RichText::new(note).color(pal.secondary));
+    match button {
+        Some(text) => {
+            child.add_space(8.0);
+            glass_button(&mut child, pal, text, true).clicked()
+        }
+        None => false,
+    }
+}
+
+/// One listed video; returns its row and whether its remove button was pressed.
+fn video_row(
+    ui: &mut Ui,
+    pal: &Palette,
+    video: &Path,
+    active: bool,
+    idle: bool,
+    camera: Option<&str>,
+) -> (Response, bool) {
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 46.0), Sense::click());
+    let rect = rect.shrink2(vec2(10.0, 1.0));
+    if response.hovered() {
+        ui.painter().rect_filled(rect, 8.0, pal.control);
+    }
+    let (icon, icon_color) = if active {
+        let pulse = (ui.input(|i| i.time) * 3.0).sin() as f32 * 0.3 + 0.7;
+        ("◉", ACCENT.gamma_multiply(pulse))
+    } else {
+        ("🎞", pal.secondary)
+    };
+    ui.painter().text(
+        egui::pos2(rect.left() + 18.0, rect.center().y),
+        Align2::CENTER_CENTER,
+        icon,
+        FontId::proportional(17.0),
+        icon_color,
+    );
+    let folder = video
+        .parent()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
+    ui.painter().text(
+        egui::pos2(rect.left() + 40.0, rect.center().y - 8.0),
+        Align2::LEFT_CENTER,
+        file_name(video),
+        FontId::proportional(13.5),
+        pal.text(),
+    );
+    ui.painter().text(
+        egui::pos2(rect.left() + 40.0, rect.center().y + 9.0),
+        Align2::LEFT_CENTER,
+        shorten(&folder, ((rect.width() - 90.0) / 6.2).max(0.0) as usize),
+        FontId::proportional(11.0),
+        pal.secondary,
+    );
+    ui.painter().hline(
+        (rect.left() + 40.0)..=rect.right(),
+        rect.bottom() + 0.5,
+        Stroke::new(1.0, pal.separator),
+    );
+    if let Some(camera) = camera {
+        let galley =
+            ui.painter()
+                .layout_no_wrap(camera.to_owned(), FontId::proportional(11.0), pal.text());
+        let pill = Align2::RIGHT_CENTER.anchor_size(
+            egui::pos2(rect.right() - 40.0, rect.center().y),
+            galley.size() + vec2(16.0, 6.0),
+        );
+        ui.painter()
+            .rect_filled(pill, pill.height() / 2.0, pal.control);
+        ui.painter()
+            .galley(pill.center() - galley.size() / 2.0, galley, pal.text());
+    }
+    let mut remove = false;
+    if response.hovered() && idle {
+        let spot = Rect::from_center_size(
+            egui::pos2(rect.right() - 18.0, rect.center().y),
+            vec2(24.0, 24.0),
+        );
+        let close = RichText::new("✖").size(11.0).color(pal.secondary);
+        remove = ui
+            .put(spot, egui::Button::new(close).frame(false))
+            .on_hover_text("Remove")
+            .clicked();
+    }
+    (response.on_hover_text(video.display().to_string()), remove)
+}
+
+enum FolderChoice {
+    Default,
+    Other,
+}
+
+/// The save-location popup: the folder in use, the default choice, Other… and Show in Folder.
+fn folder_menu(
+    ui: &mut Ui,
+    pal: &Palette,
+    id: &str,
+    path: Option<&Path>,
+    custom: bool,
+    default_title: &str,
+) -> Option<FolderChoice> {
+    let title = path.map_or(default_title.to_owned(), file_name);
+    let hint = path.map_or(default_title.to_owned(), |p| p.display().to_string());
+    let button = ui
+        .add(
+            egui::Button::new(RichText::new(format!("🗀  {title}  ⏷")).size(13.0))
+                .fill(pal.control)
+                .rounding(Rounding::same(7.0))
+                .min_size(vec2(0.0, 26.0)),
+        )
+        .on_hover_text(hint);
+    let popup = ui.make_persistent_id(("folder-menu", id));
+    if button.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup));
+    }
+    let mut choice = None;
+    egui::popup_below_widget(
+        ui,
+        popup,
+        &button,
+        egui::PopupCloseBehavior::CloseOnClick,
+        |ui| {
+            ui.set_min_width(200.0);
+            if menu_check(ui, default_title, !custom) {
+                choice = Some(FolderChoice::Default);
+            }
+            if let Some(path) = path.filter(|_| custom) {
+                menu_check(ui, &file_name(path), true);
+            }
+            ui.separator();
+            if ui.button("Other…").clicked() {
+                choice = Some(FolderChoice::Other);
+            }
+            if let Some(path) = path {
+                ui.separator();
+                if ui.button("Show in Folder").clicked() {
+                    open(path);
+                }
+            }
+        },
+    );
+    choice
+}
+
+/// A menu item with a check mark when `checked`; returns whether it was clicked.
+fn menu_check(ui: &mut Ui, text: &str, checked: bool) -> bool {
+    let mark = if checked { "✔" } else { "    " };
+    ui.button(format!("{mark}  {text}")).clicked()
+}
+
+/// A settings page: grouped rows with a margin, like a macOS grouped form.
+fn form(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
     egui::Frame::none()
-        .fill(ui.visuals().faint_bg_color)
-        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
-        .rounding(12.0)
-        .inner_margin(egui::Margin::same(14.0))
-        .outer_margin(egui::Margin::symmetric(4.0, 6.0))
+        .inner_margin(egui::Margin::symmetric(20.0, 14.0))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new(title).size(15.0).strong());
-            ui.add_space(4.0);
             add(ui);
         });
 }
 
-/// A prominent, accent-filled button.
-fn primary(text: &str) -> egui::Button<'static> {
-    egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
-        .fill(ACCENT)
-        .min_size(egui::vec2(0.0, 28.0))
+/// A rounded group of rows, with an optional heading above it.
+fn group(ui: &mut Ui, pal: &Palette, title: Option<&str>, add: impl FnOnce(&mut Ui, &mut usize)) {
+    if let Some(title) = title {
+        ui.add_space(6.0);
+        ui.label(RichText::new(title).strong());
+    }
+    egui::Frame::none()
+        .fill(pal.group)
+        .stroke(Stroke::new(1.0, pal.separator))
+        .rounding(10.0)
+        .inner_margin(egui::Margin::symmetric(12.0, 2.0))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let mut rows = 0;
+            add(ui, &mut rows);
+        });
+    ui.add_space(12.0);
 }
 
-fn path_row(ui: &mut egui::Ui, label: &str, path: &Path, default: bool) {
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(label).weak());
-        ui.label(RichText::new(path.display().to_string()).monospace());
-        if default {
-            ui.label(RichText::new("(default)").weak().small());
-        }
-    });
+/// One row of a group: the label on the left, its control on the right.
+fn row(ui: &mut Ui, pal: &Palette, rows: &mut usize, label: &str, control: impl FnOnce(&mut Ui)) {
+    if *rows > 0 {
+        let y = ui.cursor().top();
+        ui.painter()
+            .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, pal.separator));
+    }
+    *rows += 1;
+    ui.allocate_ui_with_layout(
+        vec2(ui.available_width(), 36.0),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            ui.set_min_height(36.0);
+            if !label.is_empty() {
+                ui.label(label);
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), control);
+        },
+    );
+}
+
+fn file_name(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    )
+}
+
+/// `pipeline_lab.yaml` → `pipeline_lab`.
+fn stem(file: &str) -> String {
+    Path::new(file)
+        .file_stem()
+        .map_or_else(|| file.to_owned(), |s| s.to_string_lossy().into_owned())
+}
+
+/// `open_field` → `Open Field`.
+/// A profile's network of one kind: "From Config", or one of the library's `names`.
+fn model_picker(
+    ui: &mut Ui,
+    models: &mut std::collections::BTreeMap<String, String>,
+    key: &str,
+    names: &[String],
+) {
+    let mut chosen = models.get(key).cloned();
+    egui::ComboBox::from_id_salt(("profile-model", key))
+        .selected_text(chosen.as_deref().unwrap_or("From Config"))
+        .width(200.0)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut chosen, None, "From Config");
+            for m in names {
+                ui.selectable_value(&mut chosen, Some(m.clone()), m);
+            }
+        });
+    match chosen {
+        Some(m) => models.insert(key.to_owned(), m),
+        None => models.remove(key),
+    };
 }
 
 fn capitalized(text: &str) -> String {
-    let mut chars = text.chars();
-    chars
-        .next()
-        .map(|c| c.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
+    text.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            chars
+                .next()
+                .map(|c| c.to_uppercase().chain(chars).collect::<String>())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
-/// Opens `path` (or the nearest folder that exists) in the system file browser.
-fn reveal(path: &Path) {
+/// `text`, with its middle replaced by "…" when longer than `max` characters.
+fn shorten(text: &str, max: usize) -> String {
+    let count = text.chars().count();
+    if count <= max || max < 8 {
+        return text.to_owned();
+    }
+    let keep = (max - 1) / 2;
+    let head: String = text.chars().take(keep).collect();
+    let tail: String = text.chars().skip(count - keep).collect();
+    format!("{head}…{tail}")
+}
+
+/// Opens a folder or file with the system (the file browser for folders).
+fn open(path: &Path) {
     let Some(existing) = path.ancestors().find(|p| p.exists()) else {
         return;
     };
@@ -976,30 +2359,134 @@ fn reveal(path: &Path) {
     let _ = std::process::Command::new(program).arg(existing).spawn();
 }
 
-/// Follows the system light or dark appearance, with rounder widgets, roomier spacing and the
-/// system accent color.
+/// The platform's interface font (Segoe UI, or Inter / Noto Sans / Cantarell on Linux), the macOS
+/// type scale, and widgets styled like macOS controls, in light and dark.
 fn style(ctx: &egui::Context) {
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &[r"C:\Windows\Fonts\segoeui.ttf"]
+    } else {
+        &[
+            "/usr/share/fonts/opentype/inter/Inter-Regular.otf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
+            "/usr/share/fonts/cantarell/Cantarell-VF.otf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ]
+    };
+    let system = cfg!(not(target_os = "macos"))
+        .then(|| candidates.iter().find_map(|path| std::fs::read(path).ok()))
+        .flatten();
+    if let Some(bytes) = system {
+        let mut fonts = egui::FontDefinitions::default();
+        fonts
+            .font_data
+            .insert("system".into(), egui::FontData::from_owned(bytes));
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "system".into());
+        ctx.set_fonts(fonts);
+    }
     ctx.set_theme(egui::ThemePreference::System);
-    ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = egui::vec2(12.0, 5.0);
-        style.spacing.interact_size.y = 24.0;
-        let visuals = &mut style.visuals;
-        visuals.selection.bg_fill = ACCENT;
-        visuals.selection.stroke.color = Color32::WHITE;
-        visuals.hyperlink_color = ACCENT;
-        visuals.window_rounding = egui::Rounding::same(14.0);
-        visuals.menu_rounding = egui::Rounding::same(10.0);
-        for widgets in [
-            &mut visuals.widgets.noninteractive,
-            &mut visuals.widgets.inactive,
-            &mut visuals.widgets.hovered,
-            &mut visuals.widgets.active,
-            &mut visuals.widgets.open,
-        ] {
-            widgets.rounding = egui::Rounding::same(7.0);
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        let pal = Palette::new(theme == egui::Theme::Dark);
+        ctx.style_mut_of(theme, |style| {
+            use egui::TextStyle;
+            style.text_styles = [
+                (TextStyle::Small, FontId::proportional(11.0)),
+                (TextStyle::Body, FontId::proportional(13.5)),
+                (TextStyle::Button, FontId::proportional(13.5)),
+                (TextStyle::Heading, FontId::proportional(17.0)),
+                (TextStyle::Monospace, FontId::monospace(12.5)),
+            ]
+            .into();
+            style.spacing.item_spacing = vec2(8.0, 6.0);
+            style.spacing.button_padding = vec2(12.0, 4.0);
+            style.spacing.interact_size.y = 24.0;
+            style.spacing.slider_width = 180.0;
+            style.spacing.menu_margin = egui::Margin::same(6.0);
+            let v = &mut style.visuals;
+            v.panel_fill = pal.content;
+            v.window_fill = pal.content;
+            v.window_stroke = Stroke::new(1.0, pal.separator);
+            v.window_rounding = Rounding::same(12.0);
+            v.menu_rounding = Rounding::same(8.0);
+            v.window_shadow = egui::epaint::Shadow {
+                offset: vec2(0.0, 10.0),
+                blur: 30.0,
+                spread: 0.0,
+                color: pal.shadow,
+            };
+            v.popup_shadow = egui::epaint::Shadow {
+                offset: vec2(0.0, 6.0),
+                blur: 18.0,
+                spread: 0.0,
+                color: pal.shadow,
+            };
+            v.extreme_bg_color = if pal.dark {
+                Color32::from_rgb(28, 28, 30)
+            } else {
+                Color32::WHITE
+            };
+            v.faint_bg_color = pal.group;
+            v.selection.bg_fill = ACCENT.gamma_multiply(0.45);
+            v.selection.stroke = Stroke::new(1.0, ACCENT);
+            v.hyperlink_color = ACCENT;
+            v.slider_trailing_fill = true;
+            v.override_text_color = Some(pal.text());
+            for (w, fill) in [
+                (&mut v.widgets.inactive, pal.control),
+                (&mut v.widgets.hovered, pal.control_hover),
+                (&mut v.widgets.active, pal.control_hover),
+                (&mut v.widgets.open, pal.control_hover),
+            ] {
+                w.weak_bg_fill = fill;
+                w.bg_fill = fill;
+                w.bg_stroke = Stroke::NONE;
+                w.rounding = Rounding::same(7.0);
+                w.expansion = 0.0;
+            }
+            v.widgets.noninteractive.rounding = Rounding::same(7.0);
+            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, pal.separator);
+            v.widgets.active.bg_fill = ACCENT;
+        });
+    }
+}
+
+impl App {
+    /// The menu commands of the macOS app ([`ADD_VIDEOS`], [`PROCESS`], [`PAUSE`], [`STOP`] and the
+    /// two pages), enabled when the macOS menu items are.
+    fn shortcuts(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        let pressed = |s: &egui::KeyboardShortcut| ctx.input_mut(|i| i.consume_shortcut(s));
+        let idle = self.idle();
+        if pressed(&PAGE_PROCESS) {
+            self.page = Page::Process;
         }
-    });
+        if pressed(&PAGE_LIVE) {
+            self.page = Page::Live;
+        }
+        if pressed(&ADD_VIDEOS) && idle {
+            self.page = Page::Process;
+            self.choose(Selection::Videos, frame);
+        }
+        if pressed(&PROCESS)
+            && idle
+            && !self.engine.videos.is_empty()
+            && crate::data::video::ffmpeg_available()
+        {
+            self.engine.process_videos();
+        }
+        if self.engine.processing.is_some() {
+            if pressed(&PAUSE) {
+                self.engine.pause_or_resume();
+            }
+            if pressed(&STOP) {
+                self.engine.stop_processing();
+            }
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -1008,14 +2495,66 @@ impl eframe::App for App {
         if ctx.input_mut(|i| i.consume_shortcut(&SETTINGS)) {
             self.settings_open = !self.settings_open;
         }
-        self.toolbar(ctx);
-        self.status_bar(ctx);
-        match self.page {
-            Page::Live => self.live_page(ctx, frame),
-            Page::Process => self.process_page(ctx, frame),
+        self.shortcuts(ctx, frame);
+        // Drop videos or folders anywhere on the window.
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if !dropped.is_empty() && self.idle() {
+            self.page = Page::Process;
+            self.engine.add_videos(dropped);
+        }
+        let hovering = ctx.input(|i| !i.raw.hovered_files.is_empty());
+        let pal = Palette::new(ctx.style().visuals.dark_mode);
+
+        egui::SidePanel::left("sidebar")
+            .exact_width(SIDEBAR)
+            .resizable(false)
+            .show_separator_line(true)
+            .frame(
+                egui::Frame::none()
+                    .fill(pal.sidebar)
+                    .inner_margin(egui::Margin::symmetric(10.0, 0.0)),
+            )
+            .show(ctx, |ui| self.sidebar(ui));
+        let central = egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(pal.content))
+            .show(ctx, |ui| {
+                self.toolbar(ui, frame);
+                match self.page {
+                    Page::Process => self.process_body(ui, frame),
+                    Page::Live => self.live_body(ui),
+                }
+            });
+        let area = central.response.rect;
+        // The floating glass panel at the bottom of the content.
+        let panel = egui::Area::new(Id::new("panel"))
+            .order(egui::Order::Middle)
+            .pivot(Align2::LEFT_BOTTOM)
+            .fixed_pos(area.left_bottom() + vec2(16.0, -16.0))
+            .show(ctx, |ui| {
+                pal.glass(22.0)
+                    .inner_margin(egui::Margin::same(16.0))
+                    .show(ui, |ui| {
+                        ui.set_width(area.width() - 64.0);
+                        match self.page {
+                            Page::Process => self.process_panel(ui, frame),
+                            Page::Live => self.live_panel(ui),
+                        }
+                    });
+            });
+        self.panel_height = panel.response.rect.height();
+        self.banner(ctx, area);
+        if hovering {
+            ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::new("drop")))
+                .rect_stroke(area.shrink(8.0), 18.0, Stroke::new(3.0, ACCENT));
         }
         if self.settings_open {
-            self.settings_window(ctx, frame);
+            self.settings(ctx, frame);
         }
         if self.engine.finishing() || !self.engine.workers.is_empty() {
             ctx.request_repaint_after(Duration::from_millis(33));
@@ -1031,6 +2570,18 @@ impl eframe::App for App {
     }
 }
 
+/// The window and dock icon: `docs/icons/minimal.svg` as rendered by `scripts/make_icons.sh`.
+fn icon() -> egui::IconData {
+    let rgba = image::load_from_memory(include_bytes!("../assets/icon.png"))
+        .expect("the bundled icon is a PNG")
+        .to_rgba8();
+    egui::IconData {
+        width: rgba.width(),
+        height: rgba.height(),
+        rgba: rgba.into_raw(),
+    }
+}
+
 /// Opens the window.
 pub fn run() -> Result<()> {
     // macOS asks the user for camera access once; the answer arrives asynchronously.
@@ -1039,8 +2590,10 @@ pub fn run() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("AnimalPose")
-            .with_inner_size([1200.0, 780.0])
-            .with_min_inner_size([760.0, 520.0]),
+            .with_inner_size([1180.0, 760.0])
+            .with_min_inner_size([820.0, 540.0])
+            .with_drag_and_drop(true)
+            .with_icon(icon()),
         ..Default::default()
     };
     eframe::run_native(
@@ -1049,4 +2602,17 @@ pub fn run() -> Result<()> {
         Box::new(|cc| Ok(Box::new(App::new(&cc.egui_ctx)))),
     )
     .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_icon_is_a_square_picture() {
+        let icon = super::icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+        // Transparent corners, the artwork in the middle.
+        assert_eq!(icon.rgba[3], 0);
+        assert!(icon.rgba.chunks(4).filter(|p| p[3] == 255).count() > 256 * 256 / 10);
+    }
 }

@@ -1,0 +1,5 @@
+module CAnimalPose [system] {
+    header "animalpose.h"
+    link "animalpose"
+    export *
+}

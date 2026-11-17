@@ -335,6 +335,13 @@ def test_predict_fuses_the_views_of_a_calibrated_rig(lab, tmp_path):
     for v in (0, 1):
         assert (out / f"view{v}_tracks.csv").read_text().splitlines()[0] == CSV_HEADER
     assert not (out / "timing.json").exists()
+    # The first session saves each camera's reference; the next is measured against it.
+    assert [e.status for e in res.drift] == ["reference saved"] * 2
+    assert [d["status"] for d in json.loads((out / "camera_drift.json").read_text())] == ["reference saved"] * 2
+    again = api.predict(config=lab["pipe"], out=tmp_path / "again", views=[str(v) for v in lab["views"]],
+                        cameras=lab["cameras"], overrides=["tracker.max_animals=1", "drift.iterations=5"])
+    assert all(e.status in ("corrected", "unchanged") and e.degrees < 0.05 for e in again.drift), again.drift
+    assert len(json.loads((tmp_path / "again" / "cameras.json").read_text())) == 2
 
 
 # ------------------------------------------------------------------------------------------ label

@@ -17,6 +17,10 @@ BUILDERS = {
     "detector": lambda c: CenterDetector(c.get("backbone"), c.get("num_species", 0)),
     "pose": lambda c: PoseNet(c.get("num_keypoints", 25), c.get("backbone"), c.get("embed_dim", 64),
                                  c.get("context", False)),
+    # Arena detectors (scripts/train_arena.py): the pose network over the whole frame, one point per
+    # arena landmark; model_cfg["arena"] holds the arena definition (animalpose.arena).
+    "arena": lambda c: PoseNet(c.get("num_keypoints", 4), c.get("backbone"), c.get("embed_dim", 64),
+                                  c.get("context", False)),
     "temporal": lambda c: TemporalLSTM(c.get("num_keypoints", 25), c.get("dims", 2), c.get("hidden", 128),
                                        c.get("layers", 2), c.get("bidirectional", True), c.get("dropout", 0.1),
                                        c.get("prior_bandwidth", 0.0), c.get("prior", "kernel")),

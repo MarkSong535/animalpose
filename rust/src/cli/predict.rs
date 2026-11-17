@@ -40,7 +40,7 @@ use crate::data::video::VideoWriter;
 use crate::models::config::ModelConfig;
 use crate::models::{Model, ModelKind};
 use crate::tensor::{Ctx, Graph, NodeId};
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 
 use crate::cli::catalog::Catalog;
 use crate::cli::pairs::resolve_pair_identity;
@@ -72,6 +72,8 @@ pub struct PipelineCfg {
     pub background_filter: bool,
     /// Frames spread over the recording used for that background.
     pub background_frames: usize,
+    /// How multiview cameras are corrected for drift (the `drift:` block).
+    pub drift: crate::multiview::drift::DriftCfg,
     /// Grey levels that count as "different from background".
     pub foreground_diff: f32,
     /// Minimum share of box pixels that must differ.
@@ -129,6 +131,7 @@ impl Default for PipelineCfg {
             pair_motion_frac: 0.1,
             background_filter: false,
             background_frames: 64,
+            drift: crate::multiview::drift::DriftCfg::default(),
             foreground_diff: 25.0,
             min_foreground: 0.08,
             detector_candidates: vec!["network".to_string()],
@@ -171,6 +174,7 @@ impl PipelineCfg {
         out.pair_motion_frac = cfg.f64_at("pipeline.pair_motion_frac", out.pair_motion_frac);
         out.background_filter = cfg.bool_at("pipeline.background_filter", out.background_filter);
         out.background_frames = cfg.usize_at("pipeline.background_frames", out.background_frames);
+        out.drift = crate::multiview::drift::DriftCfg::from_config(cfg);
         out.foreground_diff =
             cfg.f64_at("pipeline.foreground_diff", f64::from(out.foreground_diff)) as f32;
         out.min_foreground = cfg.f64_at("pipeline.min_foreground", out.min_foreground);
@@ -258,13 +262,14 @@ pub struct LiveAnimal {
 /// identities that persist across frames. The temporal and behavior passes need a whole track and
 /// run when a recording is analyzed.
 pub struct LiveTracker {
-    pipe: Pipeline,
+    pipe: std::sync::Arc<Pipeline>,
     tracker: MultiAnimalTracker,
 }
 
 impl LiveTracker {
-    /// A fresh tracker over `pipe`'s networks.
-    pub fn new(pipe: Pipeline) -> Self {
+    /// A fresh tracker over `pipe`'s networks, which other trackers may share.
+    pub fn new(pipe: impl Into<std::sync::Arc<Pipeline>>) -> Self {
+        let pipe = pipe.into();
         let tracker = MultiAnimalTracker::new(pipe.tracker_cfg.clone());
         Self { pipe, tracker }
     }
@@ -430,7 +435,16 @@ pub(crate) fn run_with_progress(
 ) -> Result<()> {
     progress(Progress::Preparing)?;
     let pipeline = load_pipeline(config, overrides)?;
-    run_loaded_with_progress(&pipeline, frames, out, max_frames, fps, overlay, progress)
+    run_loaded_with_progress(
+        &pipeline,
+        frames,
+        out,
+        max_frames,
+        fps,
+        overlay,
+        progress,
+        |line| println!("{line}"),
+    )
 }
 
 /// Loads the networks `config` names, once for any number of recordings.
@@ -444,6 +458,7 @@ pub(crate) fn load_pipeline(config: &str, overrides: &[String]) -> Result<Pipeli
 /// windows start fresh at frame 0, so nothing from a previously processed video carries over. The
 /// [`Pipeline`] only holds network weights (and, with the `mps` feature, compiled GPU graphs keyed
 /// by input shape), which do not depend on the frames seen before.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_loaded_with_progress(
     pipeline: &Pipeline,
     frames: &str,
@@ -452,6 +467,7 @@ pub(crate) fn run_loaded_with_progress(
     fps: Option<f64>,
     overlay: bool,
     mut progress: impl FnMut(Progress) -> Result<()>,
+    mut log: impl FnMut(&str),
 ) -> Result<()> {
     progress(Progress::Preparing)?;
     let out_dir = PathBuf::from(out);
@@ -467,18 +483,20 @@ pub(crate) fn run_loaded_with_progress(
         serde_json::to_string_pretty(&timing)?,
     )?;
     if timing["variable"].as_bool() == Some(true) {
-        println!("variable frame rate / dropped frames: {timing}; using real timestamps");
+        log(&format!(
+            "variable frame rate / dropped frames: {timing}; using real timestamps"
+        ));
     }
     let fps = fps
         .or_else(|| timing["mean_fps"].as_f64())
         .or_else(|| source.fps())
         .unwrap_or(30.0);
-    println!(
+    log(&format!(
         "{} ({}): {} frames at {fps:.3} fps",
         source.path().display(),
         source.kind(),
         source.n_frames().min(max_frames.unwrap_or(usize::MAX))
-    );
+    ));
     let background = if pipeline.cfg.needs_background() {
         Some(
             source.sampled_background_with_checkpoint(64, max_frames, || {
@@ -514,12 +532,12 @@ pub(crate) fn run_loaded_with_progress(
             serde_json::to_string_pretty(&info)?,
         )?;
     }
-    println!(
+    log(&format!(
         "{} frames, {} tracks -> {}",
         result.n_frames,
         result.tracks.len(),
         out_dir.display()
-    );
+    ));
     if overlay {
         if crate::data::video::ffmpeg_available() {
             let total = result.n_frames;
@@ -531,9 +549,9 @@ pub(crate) fn run_loaded_with_progress(
             }
             progress(Progress::FinishingOverlay)?;
             let written = writer.finish()?;
-            println!("overlay.mp4: {written} frames");
+            log(&format!("overlay.mp4: {written} frames"));
         } else {
-            println!("overlay.mp4 skipped: ffmpeg is not installed");
+            log("overlay.mp4 skipped: ffmpeg is not installed");
         }
     }
     Ok(())
@@ -1340,7 +1358,7 @@ fn align_kinematics(
 }
 
 /// The `tracker:` block over `TrackerConfig`'s defaults.
-fn tracker_config(cfg: &Config) -> TrackerConfig {
+pub(crate) fn tracker_config(cfg: &Config) -> TrackerConfig {
     let mut out = TrackerConfig::default();
     out.high_thresh = cfg.f64_at("tracker.high_thresh", out.high_thresh);
     out.low_thresh = cfg.f64_at("tracker.low_thresh", out.low_thresh);
@@ -1403,6 +1421,41 @@ pub(crate) fn checkpoint_path(cfg: &Config, path: &str) -> PathBuf {
         .unwrap_or(file)
 }
 
+/// With `checksums.<kind>` in the config, the checkpoint must have that SHA-256; it is checked
+/// before the file is loaded, so a wrong or tampered file stops the run before any video is read.
+pub(crate) fn verify_checksum(cfg: &Config, key: &str, file: &Path) -> Result<()> {
+    let kind = key.trim_start_matches("checkpoints.");
+    let Some(expected) = cfg
+        .get(&format!("checksums.{kind}"))
+        .and_then(|v| v.as_str())
+    else {
+        return Ok(());
+    };
+    ensure!(
+        file.is_file(),
+        "the {kind} checkpoint {} is missing",
+        file.display()
+    );
+    let actual = crate::assay::output::sha256_cached(file)?;
+    ensure!(
+        actual.eq_ignore_ascii_case(expected.trim()),
+        "the {kind} checkpoint {} has SHA-256 {actual}, the config expects {expected}",
+        file.display()
+    );
+    Ok(())
+}
+
+/// The checkpoints a config loads, by kind.
+pub(crate) fn checkpoints(cfg: &Config) -> Vec<(String, PathBuf)> {
+    ["detector", "pose", "temporal", "behavior", "arena"]
+        .iter()
+        .filter_map(|kind| {
+            let path = cfg.get(&format!("checkpoints.{kind}"))?.as_str()?;
+            Some(((*kind).to_owned(), checkpoint_path(cfg, path)))
+        })
+        .collect()
+}
+
 /// Loads one checkpoint and checks the network kind it holds.
 fn load_net(cfg: &Config, key: &str, kind: ModelKind) -> Result<Net> {
     let path = cfg
@@ -1410,6 +1463,7 @@ fn load_net(cfg: &Config, key: &str, kind: ModelKind) -> Result<Net> {
         .and_then(|v| v.as_str())
         .with_context(|| format!("`{key}` is missing from the config"))?;
     let file = checkpoint_path(cfg, path);
+    verify_checksum(cfg, key, &file)?;
     let (got_cfg, got_kind, weights) =
         crate::models::load(&file).with_context(|| format!("cannot read {path}"))?;
     if got_kind != kind {
@@ -1903,6 +1957,11 @@ mod tests {
         assert_eq!(pc.temporal_window, 64);
         assert_eq!(pc.temporal_hop, 32);
         assert_eq!(pc.detector_candidates, ["network".to_string()]);
+        // `multiview/drift.py:DriftConfig`.
+        let d = &pc.drift;
+        assert!(d.enabled);
+        assert_eq!((d.coarsest, d.iterations, d.samples), (64, 30, 40_000));
+        assert!((d.huber - 1.345).abs() < 1e-12);
     }
 
     /// The per-frame animal size `resolve_pair_identity` is handed.

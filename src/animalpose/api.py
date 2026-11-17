@@ -31,7 +31,8 @@ from animalpose.frames import (
     timing_report,
 )
 from animalpose.multiview.camera import Camera
-from animalpose.pipeline import MultiViewPipeline, PipelineConfig, PosePipeline
+from animalpose.multiview.drift import DriftConfig, References, correct
+from animalpose.pipeline import MultiViewPipeline, PipelineConfig, PosePipeline, median_background
 from animalpose.selftrain import LabelOptions, label_videos
 from animalpose.tracking.tracker import TrackerConfig
 from animalpose.train.loops import TRAINERS
@@ -49,7 +50,8 @@ class Prediction:
 
     A single recording fills ``frames``, ``tracks`` and ``overlay_frames`` (``tracks.npz``, ``tracks.csv``,
     ``overlay.mp4``); a multi-camera run fills ``animals``, ``views`` and ``per_view`` (``animals3d.npz`` and
-    one ``view<i>_tracks.csv`` per view). ``result`` is the tracking result itself, for code that would rather
+    one ``view<i>_tracks.csv`` per view; ``cameras.json`` the cameras used, corrected for drift, and
+    ``camera_drift.json``). ``result`` is the tracking result itself, for code that would rather
     read the tracks than re-open the file; ``behaviors`` is the classifier's catalogue, if it ran.
     """
 
@@ -62,6 +64,7 @@ class Prediction:
     views: int = 0
     result: Any = None
     per_view: tuple[Any, ...] = ()
+    drift: tuple[Any, ...] = ()  # multiview: one drift.Entry per camera (camera_drift.json)
 
 
 def train(model: str, config: str | Path, overrides: Sequence[str] = ()) -> tuple[Any, list[dict]]:
@@ -122,7 +125,9 @@ def predict(video: str | Path | None = None, *, config: str | Path = "configs/pi
     """Detect, track and classify one recording; writes ``tracks.npz``, ``tracks.csv`` and ``overlay.mp4``.
 
     ``views`` + ``cameras`` (a JSON list of ``Camera.to_dict()``) run the multi-camera pipeline and also
-    write ``animals3d.npz``; ``synthetic`` renders a two-mouse demo instead of reading a file.
+    write ``animals3d.npz``; each camera is first corrected for drift against its reference picture
+    (``<cameras>.references/``, see :mod:`animalpose.multiview.drift` and the config's ``drift:``);
+    ``synthetic`` renders a two-mouse demo instead of reading a file.
     """
     cfg = load_config(config, list(overrides), pipeline_schema())
     out = Path(out)
@@ -131,13 +136,20 @@ def predict(video: str | Path | None = None, *, config: str | Path = "configs/pi
 
     if views:
         cams = [Camera.from_dict(d) for d in json.loads(Path(cameras).read_text())]
-        res = MultiViewPipeline(pipe, cams).run([read_frames(v, max_frames)[0] for v in views])
+        frames = [read_frames(v, max_frames)[0] for v in views]
+        drift_cfg, entries = DriftConfig(**cfg.get("drift", {})), []
+        if drift_cfg.enabled:
+            backgrounds = [median_background(f, pipe.cfg.background_frames) for f in frames]
+            cams, entries = correct(cams, backgrounds, References.beside(cameras), drift_cfg)
+            (out / "camera_drift.json").write_text(json.dumps([e.to_dict() for e in entries], indent=2))
+        (out / "cameras.json").write_text(json.dumps([c.to_dict() for c in cams], indent=2))
+        res = MultiViewPipeline(pipe, cams).run(frames)
         np.savez_compressed(out / "animals3d.npz", **{f"animal{g}_{k}": v for g, a in res["animals"].items()
                                                       for k, v in a.items() if isinstance(v, np.ndarray)})
         for v, r in enumerate(res["per_view"]):
             r.to_csv(out / f"view{v}_tracks.csv")
         return Prediction(out=out, animals=len(res["animals"]), views=len(cams), result=res,
-                          per_view=tuple(res["per_view"]))
+                          per_view=tuple(res["per_view"]), drift=tuple(entries))
 
     if synthetic:
         from animalpose.data.synthetic import make_cameras, render_video, simulate

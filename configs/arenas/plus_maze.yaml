@@ -1,0 +1,27 @@
+# Elevated plus maze seen from above: the 8 outer corners, 2 at the end of each arm, clockwise
+# from the arm nearest the image's top ("north"). The north-south strip (1, 2, 5, 6) and the
+# east-west strip (8, 3, 4, 7) are two intersecting quadrangles: the centre is their overlap,
+# and each arm runs from its end to it. Which pair of arms is closed is checked against the
+# walls seen in the video; the kinds below are the fallback.
+name: plus_maze
+experiment: plus_maze
+ask: the 8 outer corners (2 at the end of each arm)
+order: plus
+points:
+  - north arm, left corner
+  - north arm, right corner
+  - east arm, top corner
+  - east arm, bottom corner
+  - south arm, right corner
+  - south arm, left corner
+  - west arm, bottom corner
+  - west arm, top corner
+floor: []
+zones:
+  - {name: center, kind: center, polygon: ["2-5 x 8-3", "2-5 x 7-4", "1-6 x 7-4", "1-6 x 8-3"]}
+  - {name: arm_north, kind: closed_arm, polygon: ["1-6 x 8-3", 1, 2, "2-5 x 8-3"]}
+  - {name: arm_east, kind: open_arm, polygon: ["2-5 x 8-3", 3, 4, "2-5 x 7-4"]}
+  - {name: arm_south, kind: closed_arm, polygon: ["2-5 x 7-4", 5, 6, "1-6 x 7-4"]}
+  - {name: arm_west, kind: open_arm, polygon: ["1-6 x 7-4", 7, 8, "1-6 x 8-3"]}
+sources:
+  folder: /home/z0song04/upload3/plus maze  # one top camera: every video is a top view

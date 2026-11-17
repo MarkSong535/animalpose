@@ -25,6 +25,11 @@
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 *.avi filter=lfs diff=lfs merge=lfs -text
 
+# The sample profiles' networks (samples/, installed by the desktop apps) are plain git objects,
+# so a checkout or a source archive without git-lfs still has them. Each stays under GitHub's
+# 50 MB warning; scripts/build_samples.py refuses a larger one.
+samples/**/*.pt !filter !diff !merge -text
+
 # Generated torch reference dumps: diffable but never hand-edited.
 tests/fixtures/** linguist-generated
 

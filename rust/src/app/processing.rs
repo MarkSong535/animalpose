@@ -95,6 +95,8 @@ impl Snapshot {
         }
     }
 
+    /// The stage, prefixed with the video count in a batch: one line for both.
+    #[cfg_attr(not(feature = "ffi"), allow(dead_code))]
     pub(crate) fn label(self) -> String {
         let stage = self.stage_label();
         if self.total > 1 && self.completed < self.total {
@@ -194,16 +196,23 @@ impl Control {
     }
 }
 
+/// How a job ended: the message to show and the folder its results are in.
+#[derive(Debug, Default)]
+pub(crate) struct Outcome {
+    pub(crate) status: String,
+    pub(crate) dir: Option<PathBuf>,
+}
+
 pub(crate) struct Job {
     /// Finishes with the status message to show.
-    pub(crate) thread: JoinHandle<Result<String>>,
+    pub(crate) thread: JoinHandle<Result<Outcome>>,
     pub(crate) control: Arc<Control>,
 }
 
 impl Job {
     pub(crate) fn start(
         total: usize,
-        work: impl FnOnce(&Control) -> Result<String> + Send + 'static,
+        work: impl FnOnce(&Control) -> Result<Outcome> + Send + 'static,
     ) -> Self {
         let control = Arc::new(Control::new(total));
         let worker_control = control.clone();
@@ -257,7 +266,7 @@ mod tests {
             resumed.send(())?;
             can_finish.recv()?;
             control.report(Progress::Overlay { done: 1, total: 5 })?;
-            Ok(String::new())
+            Ok(Outcome::default())
         });
         let wait_for_pause = || {
             let (state, _) = job

@@ -71,6 +71,10 @@ pub enum ModelKind {
     Behavior,
     /// `crate::models::temporal`, the keypoint-track smoother (`temporal/model.py`).
     Temporal,
+    /// An arena detector (`scripts/train_arena.py`): the pose network over the whole frame, one
+    /// point per arena landmark, its arena definition in the config's `arena` entry
+    /// ([`crate::assay::arena_model`]).
+    Arena,
 }
 
 impl ModelKind {
@@ -81,6 +85,7 @@ impl ModelKind {
             Self::Detector => "detector",
             Self::Behavior => "behavior",
             Self::Temporal => "temporal",
+            Self::Arena => "arena",
         }
     }
 }
@@ -94,8 +99,9 @@ impl FromStr for ModelKind {
             "detector" => Ok(Self::Detector),
             "behavior" => Ok(Self::Behavior),
             "temporal" => Ok(Self::Temporal),
+            "arena" => Ok(Self::Arena),
             other => anyhow::bail!(
-                "unknown model kind {other:?}: expected pose, detector, behavior or temporal"
+                "unknown model kind {other:?}: expected pose, detector, behavior, temporal or arena"
             ),
         }
     }
@@ -127,7 +133,7 @@ impl Model {
     /// scratch starts.
     pub fn build(kind: ModelKind, cfg: &ModelConfig, weights: &Weights) -> Result<Self> {
         let mut model = match kind {
-            ModelKind::Pose => Self::Pose(Box::new(pose::PoseNet::new(cfg)?)),
+            ModelKind::Pose | ModelKind::Arena => Self::Pose(Box::new(pose::PoseNet::new(cfg)?)),
             ModelKind::Detector => Self::Detector(Box::new(detector::CenterDetector::new(cfg)?)),
             ModelKind::Behavior => Self::Behavior(Box::new(behavior::BehaviorTCN::new(cfg))),
             ModelKind::Temporal => Self::Temporal(Box::new(temporal::TemporalLSTM::new(cfg)?)),

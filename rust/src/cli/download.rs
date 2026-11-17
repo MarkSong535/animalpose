@@ -200,6 +200,11 @@ fn hash_file<H: Hasher>(path: &Path, mut h: H) -> Result<String> {
     Ok(hex(&h.finish()))
 }
 
+/// The hex SHA-256 of a file.
+pub fn sha256_file(path: &Path) -> Result<String> {
+    hash_file(path, Sha256::new())
+}
+
 /// `md5(path)`: the hex MD5 of a file.
 pub fn md5_file(path: &Path) -> Result<String> {
     hash_file(path, Md5::new())

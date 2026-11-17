@@ -41,7 +41,7 @@
 
 use crate::tensor::ops::{self, SplitMix};
 use crate::tensor::{BnMode, Graph, NodeId, Shape};
-use std::cell::RefCell;
+use std::sync::RwLock;
 
 /// How a forward pass behaves, mirroring `nn.Module.train()` / `nn.Module.eval()`: batch norm uses the
 /// batch statistics and updates its running buffers while training, dropout is active, and both use the
@@ -97,8 +97,9 @@ impl Slot {
     }
 }
 
-/// A layer of the network: it runs on a tape node and knows its own parameters by name.
-pub trait Layer {
+/// A layer of the network: it runs on a tape node and knows its own parameters by name. Layers are
+/// shareable between threads, so one loaded network can serve several cameras or jobs at once.
+pub trait Layer: Send + Sync {
     /// Runs the layer on `x`, pushing its parameters onto the tape first.
     fn forward(&self, g: &mut Graph, x: NodeId, ctx: &mut Ctx) -> NodeId;
 
@@ -171,34 +172,39 @@ pub trait Layer {
     }
 }
 
-/// Slots owned by a leaf layer: parameters and buffers in one list, borrow-checked so a training
-/// forward pass may update the running statistics through `&self`.
-struct Slots(RefCell<Vec<Slot>>);
+/// Slots owned by a leaf layer: parameters and buffers in one list, behind a lock so a training
+/// forward pass may update the running statistics through `&self`, and so inference can share the
+/// layer between threads (readers never block each other).
+struct Slots(RwLock<Vec<Slot>>);
 
 impl Slots {
     fn new(slots: Vec<Slot>) -> Self {
-        Self(RefCell::new(slots))
+        Self(RwLock::new(slots))
+    }
+
+    fn read(&self) -> std::sync::RwLockReadGuard<'_, Vec<Slot>> {
+        self.0.read().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Pushes slot `i` onto the tape.
     fn push(&self, g: &mut Graph, i: usize) -> NodeId {
-        self.0.borrow()[i].push(g)
+        self.read()[i].push(g)
     }
 
-    /// Values of slot `i`, cloned out of the borrow.
+    /// Values of slot `i`, cloned out of the lock.
     fn data(&self, i: usize) -> Vec<f32> {
-        self.0.borrow()[i].data.clone()
+        self.read()[i].data.clone()
     }
 
     fn visit(&self, f: &mut dyn FnMut(&Slot)) {
-        let held = self.0.borrow();
+        let held = self.read();
         for s in held.iter() {
             f(s);
         }
     }
 
     fn visit_mut(&self, f: &mut dyn FnMut(&mut Slot)) {
-        let mut held = self.0.borrow_mut();
+        let mut held = self.0.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         for s in held.iter_mut() {
             f(s);
         }
@@ -206,8 +212,7 @@ impl Slots {
 
     /// The trainable names, in slot order.
     fn names(&self) -> Vec<String> {
-        self.0
-            .borrow()
+        self.read()
             .iter()
             .filter(|s| s.trainable)
             .map(|s| s.name.clone())

@@ -391,7 +391,7 @@ impl MultiAnimalTracker {
             + 1e-6;
         let dc = [
             (det.bbox[0] + det.bbox[2]) / 2.0 - (track.last_box[0] + track.last_box[2]) / 2.0,
-            (det.bbox[1] + track.last_box[3]) / 2.0 - (track.last_box[1] + track.last_box[3]) / 2.0,
+            (det.bbox[1] + det.bbox[3]) / 2.0 - (track.last_box[1] + track.last_box[3]) / 2.0,
         ];
         let dist = (dc[0] * dc[0] + dc[1] * dc[1]).sqrt() / diag;
         let spatial = (dist / (1.0 + 0.1 * track.time_since_update as f64) - 1.0).max(0.0);
@@ -749,6 +749,25 @@ mod tests {
         assert_eq!(out.iter().filter(|f| f.len() == 2).count(), 160 - 70);
         // The re-identified track keeps id 1 on the frame it reappears.
         assert_eq!(out[110].values().copied().collect::<Vec<_>>(), vec![0, 1]);
+    }
+
+    /// `_reid_cost` without appearance: the distance between box centres in box diagonals,
+    /// allowed to grow with the time lost. A detection straight below the track is as far as one
+    /// the same distance to the side (the vertical centre once mixed in the track's bottom edge).
+    #[test]
+    fn reid_cost_measures_the_distance_between_box_centres() {
+        let mut tracker = MultiAnimalTracker::with_defaults();
+        tracker.update(&[Detection::new([100.0, 100.0, 130.0, 140.0], 0.9)]);
+        let track = tracker.tracks[0].clone();
+        let diag = 50.0; // the 30 × 40 box
+        let below = Detection::new([100.0, 300.0, 130.0, 340.0], 0.9); // 200 px down
+        let aside = Detection::new([300.0, 100.0, 330.0, 140.0], 0.9); // 200 px right
+        let expected = 0.5 * (200.0 / diag / (1.0 + 0.1 * track.time_since_update as f64) - 1.0) + 0.1;
+        assert!((tracker.reid_cost(&track, &below) - expected).abs() < 1e-6);
+        assert!((tracker.reid_cost(&track, &aside) - expected).abs() < 1e-6);
+        // In place again: only the base cost.
+        let here = Detection::new([100.0, 100.0, 130.0, 140.0], 0.9);
+        assert!((tracker.reid_cost(&track, &here) - 0.1).abs() < 1e-6);
     }
 
     #[test]

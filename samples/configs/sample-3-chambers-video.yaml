@@ -1,0 +1,46 @@
+# Three Chamber (Pre-Cd F2 Video): ~/upload/Pre-Cd F2 13wks/3 Chambers Video (larcc). Standalone: no `extends`, the networks come from the profile.
+# Multiview: put each top/side pair in its own folder as top.mp4 and side.mp4.
+device: auto
+pipeline:
+  det_size:
+  - 256
+  - 320
+  det_thresh: 0.3
+  crop_size: 192
+  kp_conf_thresh: 0.3
+  embedder: model
+  pair_decoding: true
+  pair_identity: true
+  pair_motion_frac: 0.1
+  temporal_window: 64
+tracker:
+  high_thresh: 0.5
+  low_thresh: 0.2
+  max_animals: 3
+  max_lost: 90
+checkpoints:
+  detector: null
+  pose: null
+  temporal: null
+  behavior: null
+  arena: null
+assay:
+  experiment: three_chamber
+  arena:
+    rig: sample-3-chambers-video
+    width: 0.8292
+    top_view: top
+    side_view: side
+  cups:
+  - name: L
+    center:
+    - -0.3292
+    - -0.0498
+    radius: 0.08
+    height: 0.1818
+  - name: R
+    center:
+    - 0.3719
+    - -0.0512
+    radius: 0.08
+    height: 0.1818

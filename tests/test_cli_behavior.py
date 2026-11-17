@@ -395,7 +395,10 @@ def test_predict_renders_a_synthetic_demo_and_fuses_a_rig(models, tmp_path, caps
     (rig / "cams.json").write_text(json.dumps([c.to_dict() for c in cams]))
     assert main(["predict", "--views", str(rig / "view0.mp4"), str(rig / "view1.mp4"), "--cameras",
                  str(rig / "cams.json"), "--config", str(models["pipe"]), "--out", str(rig / "out")]) == 0
-    printed = capsys.readouterr().out.strip()
+    *drift, printed = capsys.readouterr().out.strip().splitlines()
+    # The first run with this rig saves each camera's reference picture beside cams.json.
+    assert drift == [f"{c.name} reference saved (later sessions are measured against this one)" for c in cams]
+    assert (rig / "cams.references" / f"{cams[0].name}.png").is_file()
     animals, views, _ = re.fullmatch(r"(\d+) animals fused across (\d+) views -> (.*)", printed).groups()
     z = np.load(rig / "out" / "animals3d.npz")
     assert int(views) == 2 and int(animals) == len({k.split("_")[0] for k in z.files})

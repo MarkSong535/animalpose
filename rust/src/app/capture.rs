@@ -9,11 +9,11 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 
 use super::library::PipelineFiles;
+use super::models::ModelCache;
 use super::recording::{self, Phase, Session};
 use crate::algos::image::Bgr;
 use crate::cli::overlay::draw_pose;
-use crate::cli::predict::{LiveTracker, Pipeline};
-use crate::data::config::Config;
+use crate::cli::predict::LiveTracker;
 use crate::data::video::VideoReader;
 
 /// Where frames come from.
@@ -92,6 +92,7 @@ impl Worker {
     pub(crate) fn start(
         source: Source,
         files: Option<PipelineFiles>,
+        models: Arc<ModelCache>,
         live: bool,
         index: usize,
         control: Arc<CaptureControl>,
@@ -167,7 +168,8 @@ impl Worker {
                 preview_error.clone(),
             );
             std::thread::spawn(move || {
-                analysis_loop(&latest, &ended, &live, &control, files, &shown, &error)
+                let models = files.map(|files| (files, models));
+                analysis_loop(&latest, &ended, &live, &control, models, &shown, &error)
             })
         };
         Self {
@@ -257,11 +259,13 @@ fn analysis_loop(
     ended: &AtomicBool,
     live: &AtomicBool,
     control: &CaptureControl,
-    files: Option<PipelineFiles>,
+    models: Option<(PipelineFiles, Arc<ModelCache>)>,
     shown: &Mutex<Option<Shown>>,
     error: &Mutex<Option<String>>,
 ) {
-    let Some(files) = files else { return };
+    let Some((files, models)) = models else {
+        return;
+    };
     let mut tracker = None;
     let mut last = 0;
     while !control.stop.load(Ordering::Relaxed) && !ended.load(Ordering::Acquire) {
@@ -287,9 +291,8 @@ fn analysis_loop(
         }
         let t = Instant::now();
         if tracker.is_none() {
-            match Config::load(&files.config, &files.overrides)
-                .and_then(|c| Pipeline::from_config(&c))
-            {
+            // Every camera shares one set of networks; each keeps its own tracker.
+            match models.get(&files) {
                 Ok(pipeline) => tracker = Some(LiveTracker::new(pipeline)),
                 Err(err) => {
                     *error.lock().unwrap() = Some(format!("Live pose preview: {err:#}"));

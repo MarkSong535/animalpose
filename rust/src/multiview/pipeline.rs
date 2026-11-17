@@ -11,8 +11,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 
-use super::camera::{load_cameras, Camera};
+use super::camera::{dumps_cameras, load_cameras, Camera};
 use super::dense::Vec3;
+use super::drift::{correct, Entry, References};
 use super::fusion::{fuse_identities, triangulate_identities, Animal3d, Identities, ViewTrack};
 use super::npz::{write_npz, Member};
 use super::triangulation::nan_to_num;
@@ -380,7 +381,21 @@ impl MultiViewResult {
         self.to_npz(&out.join("animals3d.npz"))?;
         for (v, r) in self.per_view.iter().enumerate() {
             r.to_csv(&out.join(format!("view{v}_tracks.csv")))?;
+            // The tracks as arrays and which animal each one is, so rules can run again later
+            // without the networks.
+            r.to_npz(&out.join(format!("view{v}_tracks.npz")))?;
         }
+        let identities: Vec<serde_json::Value> = self
+            .identities
+            .iter()
+            .map(|((view, track), animal)| {
+                serde_json::json!({"view": view, "track": track, "animal": animal})
+            })
+            .collect();
+        std::fs::write(
+            out.join("identities.json"),
+            serde_json::to_vec_pretty(&identities)?,
+        )?;
         Ok(())
     }
 
@@ -415,9 +430,6 @@ pub(crate) fn run_cli_with_progress(
 ) -> Result<()> {
     progress(Progress::Preparing)?;
     let cfg = Config::load(config, overrides)?;
-    let out_dir = PathBuf::from(out);
-    std::fs::create_dir_all(&out_dir)
-        .with_context(|| format!("cannot create {}", out_dir.display()))?;
     let pipe = Pipeline::from_config(&cfg)?;
     let cams = load_cameras(cameras)?;
     ensure!(
@@ -426,6 +438,60 @@ pub(crate) fn run_cli_with_progress(
         cams.len(),
         views.len()
     );
+    let out_dir = PathBuf::from(out);
+    let references = References::beside(Path::new(cameras));
+    let fused = run_loaded(
+        &pipe,
+        cams,
+        views,
+        &out_dir,
+        max_frames,
+        Some(&references),
+        progress,
+    )?;
+    for entry in &fused.drift {
+        println!("{}", entry.line());
+    }
+    println!(
+        "{} animals fused across {} views -> {}",
+        fused.animals,
+        views.len(),
+        out_dir.display()
+    );
+    Ok(())
+}
+
+/// What [`run_loaded`] did.
+#[derive(Clone, Debug)]
+pub(crate) struct Fused {
+    pub animals: usize,
+    /// The cameras the views were fused with: the model's, corrected for drift.
+    #[cfg_attr(not(feature = "app"), allow(dead_code))]
+    pub cameras: Vec<Camera>,
+    /// Per camera, the drift found against its reference picture.
+    pub drift: Vec<Entry>,
+}
+
+/// Fuses `views` (in the order of `cams`) with networks that are already loaded, writes the
+/// results into `out` and returns how many animals were fused. With `references` (and
+/// `drift.enabled`), each camera is first corrected for how far it turned since its reference picture ([`super::drift`]); the
+/// cameras used go to `cameras.json` and the measurement to `camera_drift.json`.
+pub(crate) fn run_loaded(
+    pipe: &Pipeline,
+    cams: Vec<Camera>,
+    views: &[impl AsRef<Path>],
+    out: &Path,
+    max_frames: Option<usize>,
+    references: Option<&References>,
+    mut progress: impl FnMut(Progress) -> Result<()>,
+) -> Result<Fused> {
+    ensure!(
+        cams.len() == views.len(),
+        "the camera model holds {} cameras for {} views",
+        cams.len(),
+        views.len()
+    );
+    std::fs::create_dir_all(out).with_context(|| format!("cannot create {}", out.display()))?;
     let mut frames = Vec::with_capacity(views.len());
     for v in views {
         progress(Progress::Preparing)?;
@@ -433,15 +499,35 @@ pub(crate) fn run_cli_with_progress(
             read_frames_with_checkpoint(v, max_frames, 1, || progress(Progress::Preparing))?;
         frames.push(f);
     }
-    let mv = MultiViewPipeline::new(cams, &pipe.cfg);
-    let res = mv.run_with_progress(&pipe, &frames, &mut progress)?;
+    let (cams, drift) = match references.filter(|_| pipe.cfg.drift.enabled) {
+        Some(references) => {
+            let backgrounds: Vec<GrayF> = frames
+                .iter()
+                .map(|f| {
+                    // The frames the median would pick, as grey levels.
+                    let n = pipe.cfg.background_frames.max(1);
+                    let step = (f.len() / n).max(1);
+                    let picked: Vec<Image> = f.iter().step_by(step).map(u8_from_gray).collect();
+                    median_background(&picked, picked.len())
+                })
+                .collect();
+            let (cams, drift) = correct(&cams, &backgrounds, references, &pipe.cfg.drift)?;
+            std::fs::write(
+                out.join("camera_drift.json"),
+                serde_json::to_vec_pretty(&drift)?,
+            )?;
+            (cams, drift)
+        }
+        None => (cams, Vec::new()),
+    };
+    std::fs::write(out.join("cameras.json"), dumps_cameras(&cams))?;
+    let mv = MultiViewPipeline::new(cams.clone(), &pipe.cfg);
+    let res = mv.run_with_progress(pipe, &frames, &mut progress)?;
     progress(Progress::WritingTracks)?;
-    res.write(&out_dir)?;
-    println!(
-        "{} animals fused across {} views -> {}",
-        res.animals.len(),
-        views.len(),
-        out_dir.display()
-    );
-    Ok(())
+    res.write(out)?;
+    Ok(Fused {
+        animals: res.animals.len(),
+        cameras: cams,
+        drift,
+    })
 }

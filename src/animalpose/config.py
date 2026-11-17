@@ -45,13 +45,16 @@ def pipeline_schema() -> dict[str | None, set[str]]:
     """The keys a pipeline config may carry, taken from the dataclasses that consume them."""
     from dataclasses import fields
 
+    from animalpose.multiview.drift import DriftConfig
     from animalpose.pipeline import PipelineConfig
     from animalpose.tracking.tracker import TrackerConfig
 
-    return {None: {"device", "checkpoints", "pipeline", "tracker", EXTENDS},
+    # `assay` (experiment rules) and `checksums` are read by the Rust engine; Python carries them through.
+    return {None: {"device", "checkpoints", "pipeline", "tracker", "drift", "assay", "checksums", EXTENDS},
             "checkpoints": {"detector", "pose", "temporal", "behavior"},
             "pipeline": {f.name for f in fields(PipelineConfig)},
-            "tracker": {f.name for f in fields(TrackerConfig)}}
+            "tracker": {f.name for f in fields(TrackerConfig)},
+            "drift": {f.name for f in fields(DriftConfig)}}
 
 
 def load_config(path: str | Path, overrides: list[str] | None = None,

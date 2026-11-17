@@ -1,8 +1,10 @@
 """Package the native binaries built on this host, or the shared model bundle."""
 
 import argparse
+import hashlib
+import json
+import os
 import platform
-import plistlib
 import shutil
 import struct
 import subprocess
@@ -15,6 +17,9 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 LICENSE = ROOT / "LICENSE"
+# The desktop app's icon (docs/icons/minimal.svg, rendered by scripts/make_icons.sh).
+ICON = ROOT / "rust/assets/icon.png"
+ICON_PATH = Path("usr/share/icons/hicolor/256x256/apps/animalpose-gui.png")
 BINARIES = ("animalpose", "animalpose-gui")
 RUST_PACKAGE = tomllib.loads((ROOT / "rust/Cargo.toml").read_text())["package"]
 VERSION = RUST_PACKAGE["version"]
@@ -25,10 +30,32 @@ def run(*args):
     subprocess.run(args, check=True)
 
 
+SAMPLES = ROOT / "samples"
+
+
+def check_samples():
+    """The sample profiles (`samples/`, built by scripts/build_samples.py): every file present, real
+    (not a git-lfs pointer) and with the SHA-256 its manifest lists. The GUI binaries then load and
+    run each profile (`--check-samples`) before it ships."""
+    manifest = json.loads((SAMPLES / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        path = SAMPLES / entry["path"]
+        with path.open("rb") as f:
+            if f.read(24).startswith(b"version https://git-lfs"):
+                raise ValueError(f"{path} is a git-lfs pointer. Run `git lfs pull`.")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != entry["sha256"]:
+            raise ValueError(f"{path} has SHA-256 {digest}, samples/manifest.json lists {entry['sha256']}")
+    return SAMPLES
+
+
 def portable(binary, dest, name):
     with tarfile.open(dest / f"{name}.tar.gz", "w:gz") as archive:
         archive.add(binary, arcname=f"{name}/{binary.name}")
         archive.add(LICENSE, arcname=f"{name}/LICENSE")
+        if binary.name.startswith("animalpose-gui"):
+            # Found next to the executable and installed into the library on first launch.
+            archive.add(check_samples(), arcname=f"{name}/samples")
 
 
 def linux_packages(binary, dest, arch):
@@ -41,6 +68,8 @@ def linux_packages(binary, dest, arch):
         root = work / "package"
         (root / "usr/bin").mkdir(parents=True)
         shutil.copy2(binary, root / "usr/bin")
+        if gui:
+            shutil.copytree(check_samples(), root / "usr/share/animalpose/samples")
         license_path = Path(f"usr/share/doc/{name}/copyright")
         (root / license_path.parent).mkdir(parents=True)
         shutil.copy2(LICENSE, root / license_path)
@@ -54,8 +83,11 @@ def linux_packages(binary, dest, arch):
             desktop.parent.mkdir(parents=True)
             desktop.write_text(
                 "[Desktop Entry]\nType=Application\nName=AnimalPose\nExec=animalpose-gui\n"
-                "Terminal=false\nCategories=Science;Video;\n"
+                "Icon=animalpose-gui\nTerminal=false\nCategories=Science;Video;\n"
             )
+            icon = root / ICON_PATH
+            icon.parent.mkdir(parents=True)
+            shutil.copy2(ICON, icon)
             deb_deps.extend(
                 [
                     "libgl1",
@@ -119,7 +151,11 @@ def linux_packages(binary, dest, arch):
                     "%files",
                     f"%license /{license_path}",
                     f"/usr/bin/{name}",
-                    *(["/usr/share/applications/animalpose-gui.desktop"] if gui else []),
+                    *(
+                        ["/usr/share/applications/animalpose-gui.desktop", f"/{ICON_PATH}", "/usr/share/animalpose"]
+                        if gui
+                        else []
+                    ),
                     "",
                 ]
             )
@@ -130,27 +166,14 @@ def linux_packages(binary, dest, arch):
         shutil.copy2(rpm, dest)
 
 
-def macos_app(binary, dest, name):
+def macos_app(dest, name):
+    """The native SwiftUI app (`macos/`), built and bundled by `macos/build-app.sh`, on a disk image."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        subprocess.run(
+            [ROOT / "macos/build-app.sh", root], check=True, env={**os.environ, "ANIMALPOSE_VERSION": VERSION}
+        )
         app = root / "AnimalPose.app"
-        contents = app / "Contents"
-        (contents / "MacOS").mkdir(parents=True)
-        shutil.copy2(binary, contents / "MacOS")
-        with (contents / "Info.plist").open("wb") as plist:
-            plistlib.dump(
-                {
-                    "CFBundleIdentifier": "com.marksong535.animalpose",
-                    "CFBundleName": "AnimalPose",
-                    "CFBundleExecutable": binary.name,
-                    "CFBundlePackageType": "APPL",
-                    "CFBundleShortVersionString": VERSION,
-                    "CFBundleVersion": VERSION,
-                    "NSCameraUsageDescription": "AnimalPose uses your camera to track and record animals.",
-                },
-                plist,
-            )
-        run("codesign", "--force", "--sign", "-", app)
         run("codesign", "--verify", "--strict", app)
         (root / "Applications").symlink_to("/Applications")
         shutil.copy2(LICENSE, root)
@@ -186,13 +209,15 @@ def native(binaries, dest):
     version = subprocess.check_output([cli, "--version"], text=True).strip()
     if version != f"animalpose {VERSION}":
         raise ValueError(f"{cli} reports {version!r}, expected animalpose {VERSION}")
+    # The sample profiles load and run in the GUI build before they ship with it.
+    run(binaries / f"animalpose-gui{suffix}", "--check-samples", check_samples())
     for program in BINARIES:
         binary = binaries / f"{program}{suffix}"
         name = f"{program}-v{VERSION}-{label}-{arch}"
         if system == "windows":
             windows_exe(binary, dest, name, gui=program == "animalpose-gui")
         elif system == "darwin" and program == "animalpose-gui":
-            macos_app(binary, dest, name)
+            macos_app(dest, name)
         else:
             portable(binary, dest, name)
             if system == "linux":
@@ -216,8 +241,11 @@ def models(dest):
             "behavior3d",
         )
     ]
+    samples = [path for path in sorted(check_samples().rglob("*")) if path.is_file()]
     with zipfile.ZipFile(dest / f"animalpose-models-v{VERSION}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in [*configs, *checkpoints, LICENSE]:
+        # Unzipped into ~/.animalpose, samples/ is where the apps look when none ships beside them
+        # (the Windows .exe).
+        for path in [*configs, *checkpoints, *samples, LICENSE]:
             archive.write(path, path.relative_to(ROOT))
 
 

@@ -9,6 +9,7 @@
 //! | [`data`] | the procedural simulator, COCO keypoint loading, behavior sessions and degradation profiles |
 //! | [`eval`] | detection, pose, tracking and behavior metrics, and the benchmark harnesses |
 //! | [`multiview`] | cameras, calibration, triangulation, cross-view identity fusion and the 3D pipeline |
+//! | [`assay`] | the experiment layer: arena zones, per-frame features and the rule-based behavior states of an experiment setup |
 //! | [`cli`] | the command line: `train`, `finetune`, `label`, `predict`, `behavior`, `data`, `eval`, `export`, with the same configs as Python |
 //!
 //! The modules sit in the dependency order of the table above (rustfmt keeps the declarations
@@ -28,6 +29,7 @@ pub mod data;
 pub mod eval;
 #[cfg(feature = "app")]
 pub mod app;
+pub mod assay;
 pub mod cli;
 #[cfg(feature = "ffi")]
 pub mod ffi;

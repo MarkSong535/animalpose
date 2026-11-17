@@ -26,6 +26,8 @@ def _run(args) -> None:
     res = predict(args.video, config=args.config, out=args.out, overrides=args.overrides, views=args.views,
                   cameras=args.cameras, synthetic=args.synthetic, max_frames=args.max_frames, fps=args.fps,
                   overlay=not args.no_overlay)
+    for entry in res.drift:
+        print(entry.line())
     if res.views:
         print(f"{res.animals} animals fused across {res.views} views -> {res.out}")
     else:

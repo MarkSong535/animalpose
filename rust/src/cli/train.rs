@@ -554,6 +554,9 @@ impl Trainer {
                 json!({"window": cfg.usize_at("data.window", 64)})
             }
             ModelKind::Pose => json!({"crop_size": cfg.usize_at("data.crop_size", 128)}),
+            // Arena detectors are trained by scripts/train_arena.py; their input size is part of
+            // the arena definition in the model config.
+            ModelKind::Arena => json!({}),
             ModelKind::Detector => {
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let size: Vec<i64> = cfg

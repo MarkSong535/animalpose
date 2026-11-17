@@ -1,0 +1,23 @@
+# Three-chamber box seen from above: its outer perimeter and the two partition walls.
+# Corner 1 is the corner where wall ends start (edge 1-2), nearest the image's top-left; the walls
+# run from edge 1-2 to edge 4-3, so the chambers below hold whichever way the box is turned.
+name: three_chamber
+experiment: three_chamber
+ask: the 4 outer corners and both ends of each wall
+order: three_chamber
+points:
+  - corner 1
+  - corner 2
+  - corner 3
+  - corner 4
+  - wall 1, end on edge 1-2
+  - wall 1, end on edge 4-3
+  - wall 2, end on edge 1-2
+  - wall 2, end on edge 4-3
+floor: [1, 2, 3, 4]
+zones:
+  - {name: chamber_1, kind: chamber, polygon: [1, 5, 6, 4]}
+  - {name: chamber_2, kind: chamber, polygon: [5, 7, 8, 6]}
+  - {name: chamber_3, kind: chamber, polygon: [7, 2, 3, 8]}
+sources:  # top-view videos on larcc for scripts/label_arena.py
+  experiments: [3 Chamber, 3 Chambers Video, Three Chamber]

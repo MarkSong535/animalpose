@@ -74,6 +74,10 @@ tests/fixtures/models/detector_general.safetensors
 # the repository ships.
 /results/
 /slurm/
+# hand-clicked arena corners (scripts/label_arena.py; copied to larcc, exported to
+# ~/AnimalPose/zones) and clips cut from lab recordings
+/arena_labels/
+/clips_*/
 /cpp/
 /docs/DATASETS.md
 /configs/ablations/

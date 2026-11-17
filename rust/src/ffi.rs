@@ -15,7 +15,7 @@ use std::sync::atomic::Ordering;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::app::library::MODEL_KINDS;
+use crate::app::library::{Profile, MODEL_KINDS};
 use crate::app::processing::Mode;
 use crate::app::recording::{Phase, Stage};
 use crate::app::{Engine, ImportKind};
@@ -44,30 +44,108 @@ pub struct ApFrame {
 #[serde(tag = "cmd", rename_all = "snake_case")]
 enum Command {
     RefreshCameras,
-    SelectCamera { index: usize, on: bool },
-    SetPlayback { on: bool },
-    SetLive { on: bool },
+    SelectCamera {
+        index: usize,
+        on: bool,
+    },
+    SetPlayback {
+        on: bool,
+    },
+    SetLive {
+        on: bool,
+    },
     StartPreview,
     StopPreview,
-    Record { timed: bool },
+    Record {
+        timed: bool,
+    },
     ContinueStage,
     StopRecording,
-    AddVideos { paths: Vec<PathBuf> },
-    RemoveVideo { index: usize },
+    AddVideos {
+        paths: Vec<PathBuf>,
+    },
+    RemoveVideo {
+        index: usize,
+    },
     ClearVideos,
     Process,
     AnalyzeLast,
     PauseOrResume,
     StopProcessing,
-    Import { kind: String, path: PathBuf },
-    SetCalibration { path: Option<PathBuf> },
-    SetOutput { path: Option<PathBuf> },
-    SetRecordings { path: Option<PathBuf> },
-    SetConfig { name: Option<String> },
-    SetModel { kind: String, name: Option<String> },
-    SetClassifyBehavior { on: bool },
-    SetStages { stages: Vec<Stage> },
+    Import {
+        kind: String,
+        path: PathBuf,
+    },
+    /// Copies a calibration file into the library and makes it `profile`'s camera model.
+    ImportCameraModel {
+        path: PathBuf,
+        profile: String,
+    },
+    SetMultiview {
+        on: bool,
+    },
+    /// Names the view preview source `index` records as.
+    SetView {
+        index: usize,
+        name: String,
+    },
+    SetOutput {
+        path: Option<PathBuf>,
+    },
+    SetRecordings {
+        path: Option<PathBuf>,
+    },
+    SetConfig {
+        name: Option<String>,
+    },
+    SetModel {
+        kind: String,
+        name: Option<String>,
+    },
+    SetClassifyBehavior {
+        on: bool,
+    },
+    SetStages {
+        stages: Vec<Stage>,
+    },
     ClearStatus,
+    SelectProfile {
+        name: String,
+    },
+    /// Saves `profile`; `previous` is the name it had (a rename), absent for a new profile.
+    SaveProfile {
+        previous: Option<String>,
+        profile: Profile,
+    },
+    /// A new profile copied from the one in use, under a free name based on `name`.
+    NewProfile {
+        name: String,
+    },
+    DeleteProfile {
+        name: String,
+    },
+    /// Copies profile `name`; the profile in use stays.
+    DuplicateProfile {
+        name: String,
+    },
+    SetRecordingName {
+        name: String,
+    },
+    EditConfig {
+        name: Option<String>,
+    },
+    SetConfigValue {
+        key: String,
+        value: Value,
+    },
+    DuplicateConfig {
+        source: Option<String>,
+        name: String,
+    },
+    DeleteConfig {
+        name: String,
+    },
+    CloseConfig,
 }
 
 impl ApEngine {
@@ -104,7 +182,11 @@ impl ApEngine {
                 };
                 engine.import(kind, path);
             }
-            Command::SetCalibration { path } => engine.cameras_json = path,
+            Command::ImportCameraModel { path, profile } => {
+                engine.import_camera_model(&path, &profile)
+            }
+            Command::SetMultiview { on } => engine.set_multiview(on),
+            Command::SetView { index, name } => engine.set_view(index, &name),
             Command::SetOutput { path } => {
                 engine.settings.output = path;
                 engine.save();
@@ -133,7 +215,37 @@ impl ApEngine {
                 engine.settings.stages = stages;
                 engine.save();
             }
-            Command::ClearStatus => engine.status.clear(),
+            Command::ClearStatus => {
+                engine.status.clear();
+                engine.result = None;
+            }
+            Command::SelectProfile { name } => engine.select_profile(&name),
+            Command::SaveProfile { previous, profile } => {
+                engine.save_profile(previous.as_deref(), profile)?
+            }
+            Command::NewProfile { name } => {
+                let name = engine.new_profile_name(&name);
+                let mut profile = engine
+                    .profiles
+                    .iter()
+                    .find(|p| Some(&p.name) == engine.settings.profile.as_ref())
+                    .cloned()
+                    .unwrap_or_default();
+                profile.name = name;
+                engine.save_profile(None, profile)?;
+            }
+            Command::DeleteProfile { name } => engine.delete_profile(&name)?,
+            Command::DuplicateProfile { name } => {
+                engine.duplicate_profile(&name)?;
+            }
+            Command::SetRecordingName { name } => engine.recording_name = name,
+            Command::EditConfig { name } => engine.edit_config(name)?,
+            Command::SetConfigValue { key, value } => engine.set_config_value(&key, &value)?,
+            Command::DuplicateConfig { source, name } => {
+                engine.duplicate_config(source.as_deref(), &name)?
+            }
+            Command::DeleteConfig { name } => engine.delete_config(&name)?,
+            Command::CloseConfig => engine.config_form = None,
         }
         Ok(())
     }
@@ -187,12 +299,15 @@ impl ApEngine {
                 },
             })
         });
+        let views = engine.views();
         let workers: Vec<Value> = engine
             .workers
             .iter()
-            .map(|worker| {
+            .zip(&views)
+            .map(|(worker, view)| {
                 json!({
                     "name": worker.source.name(),
+                    "view": view,
                     "ready": worker.ready.load(Ordering::Acquire),
                     "ended": worker.ended.load(Ordering::Acquire),
                     "capture_error": *worker.capture_error.lock().unwrap(),
@@ -202,6 +317,13 @@ impl ApEngine {
             .collect();
         json!({
             "status": engine.status,
+            "result": engine.result,
+            "recent_results": engine.settings.recent_results,
+            "log_dir": engine.log.dir(),
+            "profiles": engine.profiles,
+            "profile": engine.settings.profile,
+            "recording_name": engine.recording_name,
+            "config_form": engine.config_form.as_ref().map(|(_, form)| form),
             "library_root": engine.library.root,
             "recordings_dir": engine.recording_dir(),
             "output_dir": engine.output_dir(),
@@ -209,11 +331,33 @@ impl ApEngine {
             "configs": engine.library.configs(),
             "models": models,
             "sources": engine.sources.iter().zip(&engine.selected).map(|(source, on)| {
-                json!({"name": source.name(), "selected": on})
+                json!({
+                    "name": source.name(),
+                    "selected": on,
+                    // What a profile's `views` stores this camera's name under, and its name
+                    // before it is given one.
+                    "key": engine.source_key(source),
+                    "default_view": engine.default_view(source),
+                })
             }).collect::<Vec<_>>(),
             "videos": engine.videos,
             "playback": engine.playback,
-            "calibration": engine.cameras_json,
+            "camera_models": engine.library.camera_models(),
+            "camera_names": engine.camera_names(),
+            "camera_model_error": match &engine.cameras {
+                Some(Err(err)) => Some(err.as_str()),
+                _ => None,
+            },
+            "view_groups": engine.view_groups().map(|groups| {
+                groups.iter().map(|group| json!({
+                    "title": group.title,
+                    "videos": group.videos.iter().map(|(index, camera)| json!({
+                        "index": index,
+                        "camera": camera,
+                    })).collect::<Vec<_>>(),
+                    "error": group.error,
+                })).collect::<Vec<_>>()
+            }),
             "workers": workers,
             "sources_ready": engine.sources_ready(),
             "session": session,

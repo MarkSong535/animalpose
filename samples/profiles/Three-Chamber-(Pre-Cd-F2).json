@@ -1,0 +1,14 @@
+{
+  "name": "Three Chamber (Pre-Cd F2)",
+  "config": "sample-3-chamber.yaml",
+  "models": {
+    "detector": "sample-detector-ft.pt",
+    "pose": "sample-pose-mv2.pt",
+    "temporal": "sample-temporal-real.pt",
+    "behavior": "sample-behavior-3d.pt",
+    "arena": "sample-arena-three-chamber.pt"
+  },
+  "classify_behavior": true,
+  "camera_model": "sample-3-chamber.json",
+  "views": {}
+}

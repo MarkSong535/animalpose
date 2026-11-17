@@ -15,15 +15,39 @@ use anyhow::{Context, Result};
 
 pub use super::capture::{list_cameras, Source};
 use super::capture::{CaptureControl, Worker};
-use super::library::{ConfigImport, FolderImport, Library, PipelineFiles, Settings};
-use super::processing::{self, Control as ProcessingControl, Job as ProcessingJob};
+use super::library::{ConfigImport, FolderImport, Library, PipelineFiles, Profile, Settings};
+use super::log::Log;
+use super::models::ModelCache;
+use super::processing::{self, Control as ProcessingControl, Job as ProcessingJob, Outcome};
 use super::recording::{self, Phase, Session};
+use super::views;
 use crate::algos::image::Bgr;
-use crate::cli::predict::Progress;
+use crate::cli::predict::{Pipeline, Progress};
+use crate::multiview::camera::{load_cameras, Camera};
+use crate::multiview::drift::References;
+
+/// A camera model for Multiview: its cameras, and where their reference pictures live (the
+/// session drift of each camera is measured against them, [`crate::multiview::drift`]).
+#[derive(Clone, Debug)]
+pub(crate) struct Rig {
+    pub cameras: Vec<Camera>,
+    pub references: Option<References>,
+}
+
+impl Rig {
+    /// The camera model saved at `path`, with its references beside it.
+    pub(crate) fn load(path: &Path) -> Result<Self> {
+        Ok(Self {
+            cameras: load_cameras(path)?,
+            references: Some(References::beside(path)),
+        })
+    }
+}
 
 /// Runs the offline pipeline on one recording. Multiple views are processed separately unless
 /// a camera calibration file is supplied for 3D fusion.
 pub fn analyze(config: &str, views: &[PathBuf], cameras: Option<&str>) -> Result<PathBuf> {
+    let rig = cameras.map(|c| Rig::load(Path::new(c))).transpose()?;
     let dir = views
         .first()
         .and_then(|v| v.parent())
@@ -35,19 +59,26 @@ pub fn analyze(config: &str, views: &[PathBuf], cameras: Option<&str>) -> Result
             overrides: Vec::new(),
         },
         views,
-        cameras,
+        rig.as_ref(),
         &dir,
         None,
+        &ModelCache::default(),
+        None,
+        &dir.with_file_name("zones"),
     )?;
     Ok(dir)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn process_views(
     files: &PipelineFiles,
     views: &[PathBuf],
-    cameras: Option<&str>,
+    rig: Option<&Rig>,
     dir: &Path,
     control: Option<&ProcessingControl>,
+    models: &ModelCache,
+    log: Option<&Log>,
+    zones: &Path,
 ) -> Result<()> {
     anyhow::ensure!(
         crate::data::video::ffmpeg_available(),
@@ -57,28 +88,21 @@ pub(crate) fn process_views(
         Some(control) => control.report(progress),
         None => Ok(()),
     };
-    let config = files.config.to_string_lossy();
-    if let Some(cameras) = cameras.filter(|_| views.len() > 1) {
-        let views = views
-            .iter()
-            .map(|v| v.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        crate::multiview::pipeline::run_cli_with_progress(
-            &config,
-            &views,
-            cameras,
-            &dir.to_string_lossy(),
-            None,
-            &files.overrides,
-            report,
-        )?;
+    report(Progress::Preparing)?;
+    let pipeline = models.get(files)?;
+    if let Some(rig) = rig.filter(|_| views.len() > 1) {
+        let names: Vec<String> = rig.cameras.iter().map(|c| c.name.clone()).collect();
+        let ordered = views::match_cameras(views, &names)?;
+        if let Some(control) = control {
+            control.begin_clip(display_name(dir));
+        }
+        fuse(&pipeline, &ordered, rig, dir, report, log)?;
+        score(files, dir, None, zones, log);
         if let Some(control) = control {
             control.clip_done()?;
         }
         return Ok(());
     }
-    report(Progress::Preparing)?;
-    let pipeline = crate::cli::predict::load_pipeline(&config, &files.overrides)?;
     for v in views {
         let out = if views.len() == 1 {
             dir.to_path_buf()
@@ -88,7 +112,8 @@ pub(crate) fn process_views(
         if let Some(control) = control {
             control.begin_clip(display_name(v));
         }
-        predict_one(&pipeline, v, &out, report)?;
+        predict_one(&pipeline, v, &out, report, log)?;
+        score(files, &out, Some(v), zones, log);
         if let Some(control) = control {
             control.clip_done()?;
         }
@@ -103,8 +128,10 @@ fn predict_one(
     video: &Path,
     out: &Path,
     report: impl FnMut(Progress) -> Result<()>,
+    log: Option<&Log>,
 ) -> Result<()> {
     anyhow::ensure!(video.is_file(), "{} does not exist", video.display());
+    let started = std::time::Instant::now();
     crate::cli::predict::run_loaded_with_progress(
         pipeline,
         &video.to_string_lossy(),
@@ -113,6 +140,10 @@ fn predict_one(
         None,
         true,
         report,
+        |line| match log {
+            Some(log) => log.line(line),
+            None => println!("{line}"),
+        },
     )?;
     for name in ["tracks.csv", "tracks.npz", "overlay.mp4"] {
         anyhow::ensure!(
@@ -121,7 +152,147 @@ fn predict_one(
             out.join(name).display()
         );
     }
+    if let Some(log) = log {
+        log.line(&format!(
+            "{}: done in {:.1} s",
+            video.display(),
+            started.elapsed().as_secs_f64()
+        ));
+    }
     Ok(())
+}
+
+/// The views of one arena, in the order of the rig's cameras, fused into 3D with networks that are
+/// already loaded. Each camera is first corrected for its drift since its reference picture.
+/// `views.json` records which video each camera's tracks came from, `cameras.json` the cameras used.
+fn fuse(
+    pipeline: &Pipeline,
+    views: &[PathBuf],
+    rig: &Rig,
+    out: &Path,
+    report: impl FnMut(Progress) -> Result<()>,
+    log: Option<&Log>,
+) -> Result<()> {
+    for view in views {
+        anyhow::ensure!(view.is_file(), "{} does not exist", view.display());
+    }
+    let started = std::time::Instant::now();
+    let fused = crate::multiview::pipeline::run_loaded(
+        pipeline,
+        rig.cameras.clone(),
+        views,
+        out,
+        None,
+        rig.references.as_ref(),
+        report,
+    )?;
+    let say = |line: &str| match log {
+        Some(log) => log.line(line),
+        None => println!("{line}"),
+    };
+    for entry in &fused.drift {
+        say(&entry.line());
+    }
+    let animals = fused.animals;
+    let manifest: Vec<_> = views
+        .iter()
+        .zip(&fused.cameras)
+        .enumerate()
+        .map(|(i, (video, camera))| {
+            serde_json::json!({
+                "view": camera.name,
+                "video": video,
+                "tracks": format!("view{i}_tracks.csv"),
+            })
+        })
+        .collect();
+    std::fs::write(
+        out.join("views.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+    let line = format!(
+        "{}: {animals} animals fused across {} views in {:.1} s",
+        display_name(out),
+        views.len(),
+        started.elapsed().as_secs_f64()
+    );
+    match log {
+        Some(log) => log.line(&line),
+        None => println!("{line}"),
+    }
+    Ok(())
+}
+
+/// Scores the experiment the config sets up on a finished analysis. A problem (say, plus maze
+/// zones that need a review) is logged and returned; the tracking results stay.
+fn score(
+    files: &PipelineFiles,
+    dir: &Path,
+    video: Option<&Path>,
+    zones: &Path,
+    log: Option<&Log>,
+) -> Option<String> {
+    let say = |line: &str| match log {
+        Some(log) => log.line(line),
+        None => println!("{line}"),
+    };
+    match crate::assay::output::run_config(
+        dir,
+        &files.config,
+        &files.overrides,
+        video,
+        zones,
+        false,
+    ) {
+        Ok(None) => None,
+        Ok(Some(report)) => {
+            say(&format!("{}: behavior scored", display_name(dir)));
+            for note in &report.notes {
+                say(&format!("  {note}"));
+            }
+            None
+        }
+        Err(err) => {
+            let warning = format!("Behavior: {err:#}");
+            say(&format!("{}: {warning}", display_name(dir)));
+            Some(warning)
+        }
+    }
+}
+
+/// One unit of a processing run: a video, or the views of one arena in camera-model order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Item {
+    /// The results folder's name.
+    pub(crate) name: String,
+    /// What the progress shows.
+    pub(crate) label: String,
+    pub(crate) views: Vec<PathBuf>,
+}
+
+impl Item {
+    pub(crate) fn video(video: &Path) -> Self {
+        Self {
+            name: recording::safe_name(
+                video
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("video"),
+            ),
+            label: display_name(video),
+            views: vec![video.to_path_buf()],
+        }
+    }
+}
+
+/// Videos the Process list holds, grouped by folder for Multiview, with the camera each one is.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ViewGroup {
+    pub(crate) title: String,
+    /// Index into the list, and the camera of the model that video is.
+    pub(crate) videos: Vec<(usize, Option<String>)>,
+    /// Why the folder cannot be fused.
+    pub(crate) error: Option<String>,
 }
 
 /// `parent/name.mp4`: enough to tell apart same-named videos from different folders.
@@ -154,16 +325,47 @@ pub(crate) fn output_dir(settings: &Settings, videos: &[PathBuf]) -> Option<Path
         .or_else(|| videos.first()?.parent().map(Path::to_path_buf))
 }
 
-/// Analyzes each video on its own, loading the networks once, into `target`. A single video is
+/// Analyzes each video on its own into `target`, with networks from `models`. A single video is
 /// saved in a `<name>-analysis` folder; several go to one `animalpose-batch-…` folder with a
 /// subfolder per video and a `batch.json` listing where each input went. A video that fails is
 /// reported and the batch moves on to the next one; stopping keeps the videos that already finished.
+/// The job's log is saved with the results as `animalpose.log`.
+#[cfg(test)]
 pub(crate) fn process_batch(
     files: &PipelineFiles,
     videos: &[PathBuf],
     target: &Path,
     control: &ProcessingControl,
-) -> Result<String> {
+    models: &ModelCache,
+    log: &Log,
+) -> Result<Outcome> {
+    let items: Vec<Item> = videos.iter().map(|v| Item::video(v)).collect();
+    process_items(
+        files,
+        &items,
+        None,
+        target,
+        control,
+        models,
+        log,
+        &target.join("zones"),
+    )
+}
+
+/// [`process_batch`] over items: single videos, and with `cameras` the views of an arena, which
+/// are fused into 3D.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn process_items(
+    files: &PipelineFiles,
+    items: &[Item],
+    rig: Option<&Rig>,
+    target: &Path,
+    control: &ProcessingControl,
+    models: &ModelCache,
+    log: &Log,
+    zones: &Path,
+) -> Result<Outcome> {
+    let videos = items;
     anyhow::ensure!(!videos.is_empty(), "Choose at least one video.");
     anyhow::ensure!(
         crate::data::video::ffmpeg_available(),
@@ -171,33 +373,67 @@ pub(crate) fn process_batch(
     );
     let report = |progress| control.report(progress);
     report(Progress::Preparing)?;
-    let pipeline =
-        crate::cli::predict::load_pipeline(&files.config.to_string_lossy(), &files.overrides)?;
-    let stem = |video: &Path| {
-        recording::safe_name(
-            video
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("video"),
-        )
+    log.line(&format!(
+        "Processing {} item(s) with {}{}",
+        videos.len(),
+        files.config.display(),
+        files
+            .overrides
+            .iter()
+            .map(|o| format!(" {o}"))
+            .collect::<String>()
+    ));
+    let pipeline = models.get(files)?;
+    let warnings = std::cell::RefCell::new(Vec::new());
+    let run = |item: &Item, dir: &Path| {
+        let video = match (item.views.as_slice(), rig) {
+            ([video], _) => {
+                predict_one(&pipeline, video, dir, report, Some(log))?;
+                Some(video.as_path())
+            }
+            (views, Some(rig)) => {
+                fuse(&pipeline, views, rig, dir, report, Some(log))?;
+                None
+            }
+            (_, None) => anyhow::bail!("Choose a camera model to fuse several views."),
+        };
+        if let Some(warning) = score(files, dir, video, zones, Some(log)) {
+            warnings
+                .borrow_mut()
+                .push(format!("{}: {warning}", item.label));
+        }
+        Ok(())
     };
-    if let [video] = videos {
-        control.begin_clip(display_name(video));
-        let name = free_name(target, &format!("{}-analysis", stem(video)));
-        let dir = processing::save_output(target, &name, Some(&name), |dir| {
-            predict_one(&pipeline, video, dir, report)
-        })?;
+    let noun = if rig.is_some() { "items" } else { "videos" };
+    if let [item] = videos {
+        control.begin_clip(item.label.clone());
+        let name = free_name(target, &format!("{}-analysis", item.name));
+        let result = processing::save_output(target, &name, Some(&name), |dir| {
+            log.start_job(&dir.join("animalpose.log"));
+            run(item, dir)
+        });
+        log.end_job();
+        let dir = result?;
         control.advance();
-        return Ok(format!("Analysis saved to {}", dir.display()));
+        let mut status = String::from("Analysis finished.");
+        for warning in warnings.borrow().iter() {
+            status += &format!("\n{warning}");
+        }
+        return Ok(Outcome {
+            status,
+            dir: Some(dir),
+        });
     }
 
     let batch = recording::new_output_dir(target, "animalpose-batch")?;
+    log.start_job(&batch.join("animalpose.log"));
     let mut used = HashSet::new();
     let mut entries = Vec::new();
     let mut failed = Vec::new();
     let mut stopped = false;
-    for video in videos {
-        let base = stem(video);
+    for item in videos {
+        let video = &item.label;
+        let base = item.name.clone();
         let mut name = base.clone();
         for n in 2.. {
             if used.insert(name.clone()) {
@@ -205,26 +441,32 @@ pub(crate) fn process_batch(
             }
             name = format!("{base}-{n}");
         }
-        control.begin_clip(display_name(video));
-        let result = processing::save_output(&batch, &name, Some(&name), |dir| {
-            predict_one(&pipeline, video, dir, report)
-        });
+        control.begin_clip(item.label.clone());
+        let result = processing::save_output(&batch, &name, Some(&name), |dir| run(item, dir));
+        let input = match item.views.as_slice() {
+            [video] => serde_json::json!(video),
+            views => serde_json::json!(views),
+        };
         match result {
-            Ok(dir) => entries.push(serde_json::json!({"video": video, "output": dir})),
+            Ok(dir) => entries.push(serde_json::json!({"video": input, "output": dir})),
             Err(err) if err.is::<processing::Stopped>() => {
+                log.line("Stopped.");
                 stopped = true;
                 break;
             }
             Err(err) => {
                 let error = format!("{err:#}");
-                failed.push(format!("{}: {error}", display_name(video)));
-                entries.push(serde_json::json!({"video": video, "error": error}));
+                log.line(&format!("{video}: failed: {error}"));
+                failed.push(format!("{video}: {error}"));
+                entries.push(serde_json::json!({"video": input, "error": error}));
             }
         }
         control.advance();
     }
+    log.end_job();
     let done = entries.iter().filter(|e| e.get("output").is_some()).count();
     if entries.is_empty() {
+        let _ = std::fs::remove_file(batch.join("animalpose.log"));
         let _ = std::fs::remove_dir(&batch);
         return Err(processing::Stopped.into());
     }
@@ -235,22 +477,20 @@ pub(crate) fn process_batch(
     )
     .with_context(|| format!("cannot write {}", batch.join("batch.json").display()))?;
     let mut status = if stopped {
-        format!(
-            "Stopped after {done} of {} videos. Finished results are in {}",
-            videos.len(),
-            batch.display()
-        )
+        format!("Stopped after {done} of {} {noun}.", videos.len())
     } else {
-        format!(
-            "Analyzed {done} of {} videos. Results saved to {}",
-            videos.len(),
-            batch.display()
-        )
+        format!("Analyzed {done} of {} {noun}.", videos.len())
     };
     if !failed.is_empty() {
-        status += &format!("\n\nFailed:\n{}", failed.join("\n"));
+        status += &format!("\n{}", failed.join("\n"));
     }
-    Ok(status)
+    for warning in warnings.borrow().iter() {
+        status += &format!("\n{warning}");
+    }
+    Ok(Outcome {
+        status,
+        dir: Some(batch),
+    })
 }
 
 /// Expands chosen files and folders into the videos to process. Folders are searched recursively
@@ -310,6 +550,8 @@ fn walk_videos(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 pub(crate) struct CaptureSummary {
     pub(crate) status: String,
     pub(crate) clips: BTreeMap<PathBuf, Vec<PathBuf>>,
+    /// The recording's folder.
+    pub(crate) dir: Option<PathBuf>,
 }
 
 pub(crate) fn finish_capture(
@@ -355,7 +597,8 @@ pub(crate) fn finish_capture(
             }
         }
     }
-    let mut status = "Preview stopped".to_owned();
+    let mut status = String::new();
+    let dir = session.as_ref().map(|s| s.dir.clone());
     if let Some(session) = session {
         let manifest = serde_json::json!({"sources": reports, "interrupted": interrupted});
         let result = (|| -> Result<()> {
@@ -375,12 +618,12 @@ pub(crate) fn finish_capture(
         } else {
             "Recording finished"
         };
-        status = format!("{verb}. {count} frames saved in {}", session.dir.display());
+        status = format!("{verb}. {count} frames saved.");
     }
     if !errors.is_empty() {
         status += &format!("\n{}", errors.join("\n"));
     }
-    CaptureSummary { status, clips }
+    CaptureSummary { status, clips, dir }
 }
 
 /// What to bring into the library.
@@ -457,7 +700,8 @@ pub struct Engine {
     pub(crate) videos: Vec<PathBuf>,
     /// Plays the first queued video in the preview as if it were a camera.
     pub(crate) playback: bool,
-    pub(crate) cameras_json: Option<PathBuf>,
+    /// The cameras of the profile's camera model, or why it could not be read.
+    pub(crate) cameras: Option<Result<Vec<Camera>, String>>,
     pub(crate) workers: Vec<Worker>,
     pub(crate) control: Arc<CaptureControl>,
     finishing: Option<JoinHandle<CaptureSummary>>,
@@ -465,9 +709,22 @@ pub struct Engine {
     importing: Option<Receiver<Result<Imported>>>,
     pub(crate) last_recording: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub(crate) status: String,
+    /// The folder the last job wrote, shown next to `status`.
+    pub(crate) result: Option<PathBuf>,
+    /// Every profile; the one in use is `settings.profile`.
+    pub(crate) profiles: Vec<Profile>,
+    /// Names the next recording's folder; may be empty.
+    pub(crate) recording_name: String,
+    /// The config open in the config editor (`Some(None)`: the default pipeline) and its form.
+    pub(crate) config_form: Option<(Option<String>, serde_json::Value)>,
+    pub(crate) models: Arc<ModelCache>,
+    pub(crate) log: Arc<Log>,
     /// Called from background threads when something changed, to wake the window.
     notify: Arc<dyn Fn() + Send + Sync>,
 }
+
+/// How many result folders the apps list.
+const RECENT_RESULTS: usize = 8;
 
 impl Engine {
     /// The library under `~/AnimalPose` and the cameras the system reports.
@@ -475,7 +732,13 @@ impl Engine {
         let root = std::env::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("AnimalPose");
-        Self::with_library(Library::open(root), list_cameras(), notify)
+        let mut engine = Self::with_library(Library::open(root), list_cameras(), notify);
+        engine.log.line("AnimalPose started");
+        if let Some(dir) = super::samples::locate() {
+            engine.install_samples(&dir);
+        }
+        engine.prewarm();
+        engine
     }
 
     pub(crate) fn with_library(
@@ -487,14 +750,15 @@ impl Engine {
             Ok(settings) => (settings, String::new()),
             Err(err) => (Settings::default(), format!("{err:#}")),
         };
-        Self {
+        let log = Arc::new(Log::new(library.root.join("logs")));
+        let mut engine = Self {
             selected: vec![false; sources.len()],
             sources,
             library,
             settings,
             videos: Vec::new(),
             playback: false,
-            cameras_json: None,
+            cameras: None,
             workers: Vec::new(),
             control: Arc::new(CaptureControl::default()),
             finishing: None,
@@ -502,8 +766,403 @@ impl Engine {
             importing: None,
             last_recording: BTreeMap::new(),
             status,
+            result: None,
+            profiles: Vec::new(),
+            recording_name: String::new(),
+            config_form: None,
+            models: Arc::new(ModelCache::default()),
+            log,
             notify: Arc::new(notify),
+        };
+        engine.load_profiles();
+        engine.load_camera_model();
+        engine
+    }
+
+    /// Installs the sample profiles shipped in `dir` ([`super::samples`]); a person's own and
+    /// edited files are never replaced.
+    pub(crate) fn install_samples(&mut self, dir: &Path) {
+        match super::samples::install(&self.library, dir, &mut self.settings) {
+            Ok(done) => {
+                if !done.added.is_empty() || !done.updated.is_empty() {
+                    self.log.line(&format!(
+                        "Sample profiles from {}: {} files added, {} updated",
+                        dir.display(),
+                        done.added.len(),
+                        done.updated.len()
+                    ));
+                }
+                let _ = self.library.save(&self.settings);
+                self.load_profiles();
+                // The active profile's calibration may be one of the files just updated.
+                self.load_camera_model();
+            }
+            Err(err) => self
+                .log
+                .line(&format!("Sample profiles not installed: {err:#}")),
         }
+    }
+
+    fn load_camera_model(&mut self) {
+        self.cameras = self.settings.camera_model.as_deref().map(|name| {
+            self.library
+                .camera_model(name)
+                .map_err(|err| format!("{err:#}"))
+        });
+    }
+
+    /// The camera model's cameras, for Multiview.
+    pub(crate) fn camera_model(&self) -> Result<&[Camera]> {
+        match &self.cameras {
+            Some(Ok(cameras)) => Ok(cameras),
+            Some(Err(err)) => anyhow::bail!("The camera model cannot be read: {err}"),
+            None => anyhow::bail!("Choose the arena's camera model in the profile."),
+        }
+    }
+
+    /// The camera model with its reference pictures, for Multiview.
+    pub(crate) fn rig(&self) -> Result<Rig> {
+        let cameras = self.camera_model()?.to_vec();
+        let references = self
+            .settings
+            .camera_model
+            .as_deref()
+            .and_then(|name| self.library.camera_model_path(name).ok())
+            .map(|path| References::beside(&path));
+        Ok(Rig {
+            cameras,
+            references,
+        })
+    }
+
+    /// The camera names of the model, if it reads.
+    pub(crate) fn camera_names(&self) -> Vec<String> {
+        self.camera_model()
+            .map(|cams| cams.iter().map(|c| c.name.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Copies a calibration into the library and makes it profile `profile`'s camera model.
+    pub(crate) fn import_camera_model(&mut self, path: &Path, profile: &str) {
+        let imported = self.library.import_camera_model(path).and_then(|name| {
+            let mut next = self
+                .profiles
+                .iter()
+                .find(|p| p.name == profile)
+                .cloned()
+                .context("That profile no longer exists.")?;
+            next.camera_model = Some(name);
+            self.save_profile(Some(profile), next)
+        });
+        if let Err(err) = imported {
+            self.status = format!("{err:#}");
+        }
+    }
+
+    pub(crate) fn set_multiview(&mut self, on: bool) {
+        self.settings.multiview = on;
+        self.save();
+    }
+
+    /// The key a camera's view is saved under: its name, numbered when several cameras share it.
+    pub(crate) fn source_key(&self, source: &Source) -> String {
+        let name = source.name();
+        let Source::Camera { index, .. } = source else {
+            return name;
+        };
+        let twins: Vec<u32> = self
+            .sources
+            .iter()
+            .filter_map(|s| match s {
+                Source::Camera { index, name: other } if *other == name => Some(*index),
+                _ => None,
+            })
+            .collect();
+        match twins.iter().position(|i| i == index) {
+            Some(n) if n > 0 => format!("{name} ({})", n + 1),
+            _ => name,
+        }
+    }
+
+    /// The view each preview source records as.
+    pub(crate) fn views(&self) -> Vec<String> {
+        self.views_of(self.workers.iter().map(|w| &w.source))
+    }
+
+    /// The label each source records as: the name given to it, or its default (see
+    /// [`Self::default_view`]).
+    pub(crate) fn views_of<'a>(&self, sources: impl Iterator<Item = &'a Source>) -> Vec<String> {
+        sources
+            .map(|source| {
+                self.settings
+                    .views
+                    .get(&self.source_key(source))
+                    .cloned()
+                    .unwrap_or_else(|| self.default_view(source))
+            })
+            .collect()
+    }
+
+    /// A camera's label before it is named: `Camera <ID>`, its place in the system's camera list
+    /// from 1, so each camera keeps its default whichever cameras are chosen. A video played as a
+    /// camera is `Video`.
+    pub(crate) fn default_view(&self, source: &Source) -> String {
+        match self.sources.iter().position(|s| s == source) {
+            Some(i) => views::default_view(i),
+            None => "Video".into(),
+        }
+    }
+
+    /// Names the view preview source `index` records as; blank goes back to the default.
+    pub(crate) fn set_view(&mut self, index: usize, view: &str) {
+        if let Some(source) = self.workers.get(index).map(|w| w.source.clone()) {
+            self.name_view(&source, view);
+        }
+    }
+
+    pub(crate) fn name_view(&mut self, source: &Source, view: &str) {
+        let key = self.source_key(source);
+        match view.trim() {
+            "" => self.settings.views.remove(&key),
+            view => self.settings.views.insert(key, view.to_owned()),
+        };
+        self.save();
+    }
+
+    /// With Multiview, the Process list by folder and the camera each video is.
+    pub(crate) fn view_groups(&self) -> Option<Vec<ViewGroup>> {
+        if !self.settings.multiview {
+            return None;
+        }
+        let names = self
+            .camera_model()
+            .map(|cams| cams.iter().map(|c| c.name.clone()).collect::<Vec<_>>());
+        let groups = views::by_folder(&self.videos)
+            .into_iter()
+            .map(|group| {
+                let indices: Vec<usize> = group
+                    .iter()
+                    .filter_map(|v| self.videos.iter().position(|w| w == v))
+                    .collect();
+                let title = group[0].parent().map(display_name).unwrap_or_default();
+                let matched = match (&names, group.len()) {
+                    (_, 1) => Ok(None),
+                    (Ok(names), _) => views::match_cameras(&group, names).map(Some),
+                    (Err(err), _) => Err(anyhow::anyhow!("{err:#}")),
+                };
+                let (videos, error) = match matched {
+                    Ok(Some(ordered)) => (
+                        indices
+                            .iter()
+                            .map(|&i| {
+                                let at = ordered.iter().position(|v| *v == self.videos[i]);
+                                (i, at.and_then(|at| names.as_ref().ok()?.get(at).cloned()))
+                            })
+                            .collect(),
+                        None,
+                    ),
+                    Ok(None) => (indices.iter().map(|&i| (i, None)).collect(), None),
+                    Err(err) => (
+                        indices.iter().map(|&i| (i, None)).collect(),
+                        Some(format!("{err:#}")),
+                    ),
+                };
+                ViewGroup {
+                    title,
+                    videos,
+                    error,
+                }
+            })
+            .collect();
+        Some(groups)
+    }
+
+    /// What Process analyzes: each video on its own, or with Multiview each folder's videos
+    /// together as the views of the camera model (a folder with one video stays single-view).
+    pub(crate) fn process_items(&self) -> Result<(Vec<Item>, Option<Rig>)> {
+        if !self.settings.multiview {
+            return Ok((self.videos.iter().map(|v| Item::video(v)).collect(), None));
+        }
+        let rig = self.rig()?;
+        let names: Vec<String> = rig.cameras.iter().map(|c| c.name.clone()).collect();
+        let mut items = Vec::new();
+        for group in views::by_folder(&self.videos) {
+            if let [video] = group.as_slice() {
+                items.push(Item::video(video));
+                continue;
+            }
+            let folder = group[0].parent().unwrap_or(Path::new(""));
+            let ordered =
+                views::match_cameras(&group, &names).with_context(|| display_name(folder))?;
+            items.push(Item {
+                name: recording::safe_name(
+                    &folder
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "views".into()),
+                ),
+                label: display_name(folder),
+                views: ordered,
+            });
+        }
+        Ok((items, Some(rig)))
+    }
+
+    /// Reads the profiles and puts the chosen one in use. A library without profiles gets a
+    /// "Default" profile made from the current settings.
+    fn load_profiles(&mut self) {
+        self.profiles = self.library.profiles();
+        if self.profiles.is_empty() {
+            let name = self
+                .settings
+                .profile
+                .clone()
+                .unwrap_or_else(|| "Default".into());
+            let profile = Profile::from_settings(&name, &self.settings);
+            if let Err(err) = self.library.save_profile(&profile, None) {
+                self.status = format!("Could not save the profile: {err:#}");
+            }
+            self.profiles = vec![profile];
+        }
+        let active = self
+            .settings
+            .profile
+            .as_ref()
+            .and_then(|name| self.profiles.iter().find(|p| &p.name == name))
+            .unwrap_or(&self.profiles[0])
+            .clone();
+        active.apply(&mut self.settings);
+        let _ = self.library.save(&self.settings);
+    }
+
+    /// Loads the active profile's networks in the background.
+    pub(crate) fn prewarm(&self) {
+        if let Ok(files) = self.library.pipeline(&self.settings) {
+            self.models.prewarm(files);
+        }
+    }
+
+    /// Puts profile `name` in use.
+    pub(crate) fn select_profile(&mut self, name: &str) {
+        if !self.idle() {
+            return;
+        }
+        let Some(profile) = self.profiles.iter().find(|p| p.name == name).cloned() else {
+            return;
+        };
+        profile.apply(&mut self.settings);
+        self.save();
+        self.log.line(&format!("Profile: {name}"));
+        self.prewarm();
+    }
+
+    /// Saves `profile`, which replaces the one called `previous` (renaming it) or is new.
+    pub(crate) fn save_profile(&mut self, previous: Option<&str>, profile: Profile) -> Result<()> {
+        anyhow::ensure!(self.idle(), "Wait for the current job to finish.");
+        self.library.save_profile(&profile, previous)?;
+        let name = profile.name.trim().to_owned();
+        let active = self.settings.profile.as_deref();
+        let was_active = previous.is_some_and(|old| Some(old) == active);
+        self.profiles = self.library.profiles();
+        if was_active || previous.is_none() {
+            if let Some(saved) = self.profiles.iter().find(|p| p.name == name).cloned() {
+                saved.apply(&mut self.settings);
+                self.save();
+                self.prewarm();
+            }
+        }
+        Ok(())
+    }
+
+    /// Deletes profile `name`; the last profile cannot be deleted.
+    pub(crate) fn delete_profile(&mut self, name: &str) -> Result<()> {
+        anyhow::ensure!(self.idle(), "Wait for the current job to finish.");
+        anyhow::ensure!(self.profiles.len() > 1, "Keep at least one profile.");
+        self.library.delete_profile(name)?;
+        self.profiles = self.library.profiles();
+        if self.settings.profile.as_deref() == Some(name) {
+            let first = self.profiles[0].clone();
+            first.apply(&mut self.settings);
+            self.save();
+            self.prewarm();
+        }
+        Ok(())
+    }
+
+    /// A free profile name based on `base`: `base`, `base 2`, …
+    /// Copies profile `source` as "`source` Copy" (numbered when taken); the profile in use stays.
+    /// Returns the copy's name.
+    pub(crate) fn duplicate_profile(&mut self, source: &str) -> Result<String> {
+        anyhow::ensure!(self.idle(), "Wait for the current job to finish.");
+        let mut copy = self
+            .profiles
+            .iter()
+            .find(|p| p.name == source)
+            .cloned()
+            .with_context(|| format!("there is no profile {source}"))?;
+        copy.name = self.new_profile_name(&format!("{source} Copy"));
+        self.library.save_profile(&copy, None)?;
+        self.profiles = self.library.profiles();
+        self.log
+            .line(&format!("Profile {source} copied as {}", copy.name));
+        Ok(copy.name)
+    }
+
+    pub(crate) fn new_profile_name(&self, base: &str) -> String {
+        let taken = |name: &str| {
+            self.profiles
+                .iter()
+                .any(|p| recording::safe_name(&p.name) == recording::safe_name(name))
+        };
+        let mut name = base.to_owned();
+        for n in 2.. {
+            if !taken(&name) {
+                break;
+            }
+            name = format!("{base} {n}");
+        }
+        name
+    }
+
+    /// Opens config `name` (`None`: the default pipeline) in the config editor.
+    pub(crate) fn edit_config(&mut self, name: Option<String>) -> Result<()> {
+        let form = super::configs::form(&self.library, name.as_deref())?;
+        self.config_form = Some((name, form));
+        Ok(())
+    }
+
+    /// Changes one setting of the config open in the editor.
+    pub(crate) fn set_config_value(&mut self, key: &str, value: &serde_json::Value) -> Result<()> {
+        anyhow::ensure!(self.idle(), "Wait for the current job to finish.");
+        let Some((Some(name), _)) = &self.config_form else {
+            anyhow::bail!("Duplicate the default config to change it.");
+        };
+        let name = name.clone();
+        super::configs::set(&self.library, &name, key, value)?;
+        self.edit_config(Some(name))?;
+        self.prewarm();
+        Ok(())
+    }
+
+    /// Copies config `source` as `new_name` and opens the copy in the editor.
+    pub(crate) fn duplicate_config(&mut self, source: Option<&str>, new_name: &str) -> Result<()> {
+        let name = super::configs::duplicate(&self.library, source, new_name)?;
+        self.edit_config(Some(name))
+    }
+
+    pub(crate) fn delete_config(&mut self, name: &str) -> Result<()> {
+        anyhow::ensure!(self.idle(), "Wait for the current job to finish.");
+        super::configs::delete(&self.library, name)?;
+        self.edit_config(None)
+    }
+
+    /// Lists `dir` first among the recent results.
+    fn remember_result(&mut self, dir: PathBuf) {
+        self.settings.recent_results.retain(|d| d != &dir);
+        self.settings.recent_results.insert(0, dir.clone());
+        self.settings.recent_results.truncate(RECENT_RESULTS);
+        self.result = Some(dir);
+        let _ = self.library.save(&self.settings);
     }
 
     pub(crate) fn recording_dir(&self) -> PathBuf {
@@ -518,10 +1177,23 @@ impl Engine {
         output_dir(&self.settings, &self.videos)
     }
 
-    /// Writes the settings to the library.
+    /// Writes the settings, and the profile in use with them.
     pub(crate) fn save(&mut self) {
+        self.load_camera_model();
         if let Err(err) = self.library.save(&self.settings) {
             self.status = format!("Could not save settings: {err:#}");
+            return;
+        }
+        let Some(name) = self.settings.profile.clone() else {
+            return;
+        };
+        let profile = Profile::from_settings(&name, &self.settings);
+        if self.profiles.contains(&profile) {
+            return;
+        }
+        match self.library.save_profile(&profile, Some(&name)) {
+            Ok(()) => self.profiles = self.library.profiles(),
+            Err(err) => self.status = format!("Could not save the profile: {err:#}"),
         }
     }
 
@@ -608,6 +1280,7 @@ impl Engine {
                 Worker::start(
                     source,
                     files.clone(),
+                    self.models.clone(),
                     self.settings.live,
                     index,
                     self.control.clone(),
@@ -639,9 +1312,20 @@ impl Engine {
             .iter()
             .map(|w| w.source.name())
             .collect::<Vec<_>>();
-        match Session::start(&target, stages, &sources) {
+        match Session::start(
+            &target,
+            &self.recording_name,
+            stages,
+            &sources,
+            &self.views(),
+        ) {
             Ok(session) => {
-                self.status = format!("Recording to {}", session.dir.display());
+                self.status.clear();
+                self.log.line(&format!(
+                    "Recording {} to {}",
+                    sources.join(", "),
+                    session.dir.display()
+                ));
                 *self.control.session.lock().unwrap() = Some(session);
             }
             Err(err) => self.status = format!("Could not start recording: {err:#}"),
@@ -704,6 +1388,8 @@ impl Engine {
                     if !summary.clips.is_empty() {
                         self.last_recording = summary.clips;
                     }
+                    self.log.line(&summary.status);
+                    self.result = summary.dir;
                     self.status = summary.status;
                 }
                 Err(_) => self.status = "Could not finalize the recording.".into(),
@@ -715,11 +1401,17 @@ impl Engine {
             .is_some_and(|job| job.thread.is_finished())
         {
             self.status = match self.processing.take().unwrap().thread.join() {
-                Ok(Ok(status)) => status,
+                Ok(Ok(outcome)) => {
+                    if let Some(dir) = outcome.dir {
+                        self.remember_result(dir);
+                    }
+                    outcome.status
+                }
                 Ok(Err(err)) if err.is::<processing::Stopped>() => err.to_string(),
                 Ok(Err(err)) => format!("Video processing failed: {err:#}"),
                 Err(_) => "The video processing thread stopped unexpectedly.".into(),
             };
+            self.log.line(&self.status);
         }
         self.poll_import();
     }
@@ -734,13 +1426,11 @@ impl Engine {
                 .into_iter()
                 .filter(|video| queued.insert(video.clone())),
         );
-        let added = self.videos.len() - before;
-        self.status = match added {
-            0 if issues.is_empty() => "Those videos are already in the list.".into(),
-            0 => String::new(),
-            1 => format!("Added 1 video ({} in the list).", self.videos.len()),
-            n => format!("Added {n} videos ({} in the list).", self.videos.len()),
-        };
+        // The list shows what was added; only problems need a message.
+        self.status.clear();
+        if self.videos.len() == before && issues.is_empty() {
+            self.status = "Already in the list.".into();
+        }
         append_issues(&mut self.status, &issues);
     }
 
@@ -766,11 +1456,29 @@ impl Engine {
                 return;
             }
         };
-        let videos = self.videos.clone();
+        let (items, cameras) = match self.process_items() {
+            Ok(plan) => plan,
+            Err(err) => {
+                self.status = format!("{err:#}");
+                return;
+            }
+        };
         self.status.clear();
         let notify = self.notify.clone();
-        self.processing = Some(ProcessingJob::start(videos.len(), move |control| {
-            let result = process_batch(&files, &videos, &target, control);
+        let (models, log) = (self.models.clone(), self.log.clone());
+        let zones = self.library.root.join("zones");
+        self.result = None;
+        self.processing = Some(ProcessingJob::start(items.len(), move |control| {
+            let result = process_items(
+                &files,
+                &items,
+                cameras.as_ref(),
+                &target,
+                control,
+                &models,
+                &log,
+                &zones,
+            );
             notify();
             result
         }));
@@ -789,10 +1497,8 @@ impl Engine {
             }
         };
         let groups = self.last_recording.clone();
-        let cameras = self
-            .cameras_json
-            .as_ref()
-            .map(|p| p.to_string_lossy().into_owned());
+        // A recording of several cameras is fused when the profile has a camera model.
+        let rig = self.rig().ok();
         let Some(result_dir) = groups
             .keys()
             .next()
@@ -804,7 +1510,7 @@ impl Engine {
         let total = groups
             .values()
             .map(|clips| {
-                if cameras.is_some() && clips.len() > 1 {
+                if rig.is_some() && clips.len() > 1 {
                     1
                 } else {
                     clips.len()
@@ -813,14 +1519,36 @@ impl Engine {
             .sum();
         self.status.clear();
         let notify = self.notify.clone();
+        let (models, log) = (self.models.clone(), self.log.clone());
+        let zones = self.library.root.join("zones");
+        self.result = None;
         self.processing = Some(ProcessingJob::start(total, move |control| {
             let result = (|| {
+                log.line(&format!(
+                    "Analyzing the recording in {}",
+                    result_dir.display()
+                ));
                 for (stage, clips) in groups {
                     processing::save_output(&stage, "analysis", Some("analysis"), |dir| {
-                        process_views(&files, &clips, cameras.as_deref(), dir, Some(control))
+                        log.start_job(&dir.join("animalpose.log"));
+                        let done = process_views(
+                            &files,
+                            &clips,
+                            rig.as_ref(),
+                            dir,
+                            Some(control),
+                            &models,
+                            Some(&log),
+                            &zones,
+                        );
+                        log.end_job();
+                        done
                     })?;
                 }
-                Ok(format!("Analysis saved to {}", result_dir.display()))
+                Ok(Outcome {
+                    status: "Analysis finished.".into(),
+                    dir: Some(result_dir),
+                })
             })();
             notify();
             result

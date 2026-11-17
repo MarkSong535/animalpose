@@ -133,8 +133,11 @@ def find_sources(root: str | Path) -> list[Source]:
 
 
 def is_held_out(source: Source, root: str | Path, every: int = 5) -> bool:
-    """Deterministic split by recording: about 1 in ``every`` sources is held out for evaluation."""
-    rel = os.path.relpath(os.path.abspath(source.path), os.path.abspath(root))
+    """Deterministic split by recording: about 1 in ``every`` sources is held out for evaluation.
+
+    The relative path is hashed with ``/`` separators, so a dataset splits the same way on every
+    platform and in the Rust port (``data/frames.rs:is_held_out``)."""
+    rel = os.path.relpath(os.path.abspath(source.path), os.path.abspath(root)).replace("\\", "/")
     return zlib.crc32(rel.encode()) % every == 0
 
 

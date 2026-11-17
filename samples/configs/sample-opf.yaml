@@ -1,0 +1,34 @@
+# Open Field (Batch 2): ~/upload2/opf (larcc). Standalone: no `extends`, the networks come from the profile.
+# Multiview: put each top/side pair in its own folder as top.mp4 and side.mp4.
+device: auto
+pipeline:
+  det_size:
+  - 256
+  - 320
+  det_thresh: 0.3
+  crop_size: 192
+  kp_conf_thresh: 0.3
+  embedder: model
+  pair_decoding: true
+  pair_identity: true
+  pair_motion_frac: 0.1
+  temporal_window: 64
+  background_filter: true
+tracker:
+  high_thresh: 0.5
+  low_thresh: 0.2
+  max_animals: 1
+  max_lost: 90
+checkpoints:
+  detector: null
+  pose: null
+  temporal: null
+  behavior: null
+  arena: null
+assay:
+  experiment: open_field
+  arena:
+    rig: sample-opf
+    width: 0.9886
+    top_view: top
+    side_view: side

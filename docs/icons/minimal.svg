@@ -1,0 +1,103 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18.17 90.50 279.67 145.67" width="280" height="146" role="img" aria-label="AnimalPose mouse tracking icon"><!--Tightly cropped vector artwork; transparent background, no borders.--><defs>
+    <style>
+      .st0 {
+        fill: url(#linear-gradient);
+      }
+
+      .st1 {
+        stroke: #204560;
+        stroke-width: 10px;
+      }
+
+      .st1, .st2, .st3, .st4 {
+        fill: none;
+      }
+
+      .st1, .st2, .st4 {
+        stroke-linecap: round;
+      }
+
+      .st5 {
+        fill: #172b44;
+      }
+
+      .st2 {
+        stroke: #65e1d2;
+        stroke-width: 4.5px;
+      }
+
+      .st2, .st4 {
+        stroke-linejoin: round;
+      }
+
+      .st6, .st3 {
+        isolation: isolate;
+      }
+
+      .st3 {
+        opacity: .75;
+        stroke: #10bfa8;
+        stroke-width: 2.5px;
+      }
+
+      .st7 {
+        fill: #204560;
+      }
+
+      .st8 {
+        opacity: .92;
+      }
+
+      .st9 {
+        opacity: .58;
+      }
+
+      .st10 {
+        fill: #132338;
+      }
+
+      .st11 {
+        fill: #b8fff2;
+        stroke: #132338;
+        stroke-width: 3.2px;
+      }
+
+      .st12 {
+        fill: #17283e;
+      }
+
+      .st4 {
+        stroke: #a8b9cc;
+        stroke-width: 4px;
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="103.55" y1="182.3" x2="250.55" y2="77.3" gradientTransform="translate(0 300.93) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#263e59"/>
+      <stop offset="1" stop-color="#132338"/>
+    </linearGradient>
+  </defs>
+  <g id="symbol">
+    <path class="st1" d="M107,177c-27,13-42,40-67,30-19-8-19-30,1-39"/>
+    <path class="st10" d="M127,202c-6,12-4,25,11,30h21c7,0,9-8,3-12l-14-8-21-10Z"/>
+    <path class="st10" d="M210,189c0,16,9,29,24,33h23c6,0,8-7,3-11l-23-15-27-7Z"/>
+    <circle class="st5" cx="202" cy="120" r="27"/>
+    <path class="st0" d="M102,177c3-36,33-61,73-61,23,0,42,8,55,24,9,10,22,17,42,22,12,3,21,9,23,16,2,9-9,14-23,14h-21c-14,19-41,32-79,32-45,0-73-19-70-47Z"/>
+    <g class="st8">
+      <path class="st2" d="M131,184l41-24,44,2,62,15"/>
+      <path class="st2" d="M216,162l-13-42"/>
+      <path class="st2" d="M131,184l11,41"/>
+      <path class="st2" d="M216,162l20,54"/>
+    </g>
+    <g>
+      <circle class="st11" cx="131" cy="184" r="7"/>
+      <circle class="st11" cx="172" cy="160" r="7"/>
+      <circle class="st11" cx="216" cy="162" r="7"/>
+      <circle class="st11" cx="203" cy="120" r="7"/>
+      <circle class="st11" cx="142" cy="225" r="7"/>
+      <circle class="st11" cx="236" cy="216" r="7"/>
+      <circle class="st11" cx="278" cy="177" r="7"/>
+    </g>
+    <circle class="st3" cx="278" cy="177" r="13"/>
+  </g>
+  </svg>

@@ -5,6 +5,7 @@
 //! argument surfaces: dotted `key.path=value` overrides, `--max-frames`, and an output prefix that
 //! gains `tracks.csv`, `behavior.csv` and a checkpoint next to it. `version` prints the version.
 
+pub mod assay_cmd;
 pub mod audit;
 pub mod calibrate;
 pub mod catalog;
@@ -37,7 +38,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The `animalpose` command tree, built with clap's builder API.
 pub fn command() -> Command {
-    Command::new("animalpose")
+    let cmd = Command::new("animalpose")
         .version(VERSION)
         .about("train and run the animalpose pose, tracking and behavior networks")
         .subcommand(Command::new("version").about("print the version and exit"))
@@ -146,9 +147,13 @@ pub fn command() -> Command {
                         .help("dotted overrides, e.g. pipeline.max_animals=2"),
                 ),
         )
+        .subcommand(assay_cmd::command())
         .subcommand(data_cmd::command())
         .subcommand(eval_cmd::command())
-        .subcommand(export_cmd::command())
+        .subcommand(export_cmd::command());
+    #[cfg(feature = "app")]
+    let cmd = cmd.subcommand(samples_command());
+    cmd
 }
 
 /// Runs one invocation; `args` holds the command line after the program name.
@@ -270,6 +275,9 @@ pub fn run(args: &[String]) -> Result<()> {
                 !p.get_flag("no_overlay"),
             )
         }
+        Some(("assay", m)) => assay_cmd::run(m),
+        #[cfg(feature = "app")]
+        Some(("samples", m)) => run_samples(m),
         Some(("data", m)) => data_cmd::run(m),
         Some(("eval", m)) => eval_cmd::run(m),
         Some(("export", m)) => export_cmd::run(m),
@@ -279,5 +287,34 @@ pub fn run(args: &[String]) -> Result<()> {
             Ok(())
         }
         Some(other) => bail!("unknown subcommand {other:?}"),
+    }
+}
+
+/// `animalpose samples check [DIR]`: the desktop apps' sample profiles. Only in builds with the
+/// app layer (`--features app`); release GUI builds check with `animalpose-gui --check-samples`.
+#[cfg(feature = "app")]
+fn samples_command() -> Command {
+    Command::new("samples")
+        .about("check the sample profiles bundled with the desktop apps")
+        .subcommand(
+            Command::new("check")
+                .about("hashes, then install, load and run every profile in a scratch library")
+                .arg(
+                    clap::Arg::new("dir")
+                        .help("the bundle [default: the one shipped with this binary]"),
+                ),
+        )
+}
+
+#[cfg(feature = "app")]
+fn run_samples(m: &clap::ArgMatches) -> Result<()> {
+    match m.subcommand() {
+        Some(("check", c)) => {
+            crate::app::check_samples(c.get_one::<String>("dir").map(std::path::Path::new))
+        }
+        _ => {
+            print!("{}", samples_command().render_help());
+            Ok(())
+        }
     }
 }

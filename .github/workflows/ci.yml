@@ -146,6 +146,13 @@ jobs:
           cargo clippy --all-targets --features gui -- -D warnings
       - name: Test (gui, which includes mps)
         run: cargo test --release --features gui
+      - name: Clippy and test the native app's C interface (ffi)
+        run: |
+          cargo clippy --all-targets --features ffi -- -D warnings
+          cargo test --release --features ffi ffi::
+      - name: Build the SwiftUI app
+        working-directory: macos
+        run: ./build-app.sh
 
   # Line coverage of the crate, reported to Codecov next to the python flag. `cargo-llvm-cov`
   # instruments the test binaries, so this runs the whole workspace suite once and writes the

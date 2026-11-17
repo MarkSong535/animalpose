@@ -97,6 +97,19 @@ def test_find_sources_split_and_sampled_frames(tmp_path):
                                                                            for s in find_sources(tmp_path)]
 
 
+
+def test_held_out_split_ignores_the_path_separator(monkeypatch):
+    """Windows relative paths use backslashes; the split must match POSIX and the Rust port."""
+    import os
+    import zlib
+
+    from animalpose.frames import Source, is_held_out
+
+    rel = "caicai/cage.mp4"  # held out when hashed as "caicai\\cage.mp4", kept with "/"
+    assert zlib.crc32(rel.replace("/", "\\").encode()) % 5 == 0 and zlib.crc32(rel.encode()) % 5 != 0
+    monkeypatch.setattr(os.path, "relpath", lambda *_: rel.replace("/", "\\"))
+    assert not is_held_out(Source("ignored", "video"), "root")
+
 def test_flip_consistency_maps_back_and_swaps_sides():
     from animalpose.selftrain import consistent_keypoints
     from animalpose.skeleton import CANONICAL

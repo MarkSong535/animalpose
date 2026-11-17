@@ -72,7 +72,7 @@ pub fn ffmpeg_available() -> bool {
 }
 
 /// `true` when the `ffprobe` executable runs.
-#[cfg(feature = "gui")]
+#[cfg(feature = "app")]
 pub(crate) fn ffprobe_available() -> bool {
     tool_available(ffprobe())
 }
@@ -128,7 +128,7 @@ pub fn probe(path: &Path) -> Result<VideoInfo> {
 }
 
 /// Reads the frame count from the MP4 header without rescanning a session's video data.
-#[cfg(feature = "gui")]
+#[cfg(feature = "app")]
 pub(crate) fn mp4_frames(path: &Path) -> Result<usize> {
     Ok(probe_stream(path, false)?.frames)
 }
@@ -276,6 +276,24 @@ impl Drop for VideoReader {
     }
 }
 
+/// Frames selected per decode pass by [`frames_at`]: FFmpeg's `select` expression parser fails
+/// past about 100 terms.
+const SELECT_CHUNK: usize = 64;
+
+/// `n` frames evenly spaced across the video (frames `step / 2 + k · step`), with their indices, in
+/// one decode pass that hands over only those frames.
+pub fn frames_evenly(path: &Path, n: usize) -> Result<Vec<(usize, Bgr)>> {
+    let info = probe(path)?;
+    let total = info.frames.max(1);
+    let n = n.clamp(1, total);
+    let (step, offset) = (total / n, total / n / 2);
+    let filter = format!("select=eq(mod(n\\,{step})\\,{offset})");
+    VideoReader::open_filtered(path, &info, Some(n), Some(&filter))?
+        .enumerate()
+        .map(|(k, frame)| Ok((offset + k * step, frame?)))
+        .collect()
+}
+
 /// The frames at `indices` (any order; returned sorted, duplicates dropped), with their indices.
 pub fn frames_at(path: &Path, indices: &[usize]) -> Result<Vec<(usize, Bgr)>> {
     frames_at_with_checkpoint(path, indices, || Ok(()))
@@ -293,17 +311,21 @@ pub(crate) fn frames_at_with_checkpoint(
         return Ok(Vec::new());
     }
     let info = probe(path)?;
-    // One decode pass keeping the selected frames: `select` evaluates `n` (the 0-based input index).
-    let expr = wanted
-        .iter()
-        .map(|i| format!("eq(n\\,{i})"))
-        .collect::<Vec<_>>()
-        .join("+");
-    let reader = VideoReader::open_filtered(path, &info, Some(wanted.len()), Some(&format!("select={expr}")))?;
+    // One decode pass per chunk keeping the selected frames: `select` evaluates `n` (the 0-based
+    // input index). FFmpeg's expression parser fails past about 100 `eq()` terms.
     let mut out = Vec::with_capacity(wanted.len());
-    for (index, frame) in wanted.iter().zip(reader) {
-        out.push((*index, frame?));
-        checkpoint()?;
+    for chunk in wanted.chunks(SELECT_CHUNK) {
+        let expr = chunk
+            .iter()
+            .map(|i| format!("eq(n\\,{i})"))
+            .collect::<Vec<_>>()
+            .join("+");
+        let filter = format!("select={expr}");
+        let reader = VideoReader::open_filtered(path, &info, Some(chunk.len()), Some(&filter))?;
+        for (index, frame) in chunk.iter().zip(reader) {
+            out.push((*index, frame?));
+            checkpoint()?;
+        }
     }
     Ok(out)
 }
@@ -373,7 +395,7 @@ impl VideoWriter {
     }
 
     /// Uses fast software encoding for live capture and avoids rewriting finished clips.
-    #[cfg(feature = "gui")]
+    #[cfg(feature = "app")]
     pub(crate) fn for_recording(path: &Path, fps: f64) -> Self {
         let mut writer = Self::new(path, fps);
         writer.realtime = true;
@@ -544,4 +566,36 @@ mod tests {
         assert!((t[1] - 0.04).abs() < 1e-6 && t[0] == 0.0);
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    /// More selected frames than FFmpeg's `select` parser takes at once, and even sampling.
+    #[test]
+    fn many_frames_are_picked_in_chunks_and_evenly() {
+        if !ffmpeg_available() {
+            eprintln!("SKIP: ffmpeg is not installed");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("animalpose-video-many-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("long.mp4");
+        let mut writer = VideoWriter::new(&path, 30.0);
+        for t in 0..300u32 {
+            let mut frame = Bgr::filled(64, 48, [20, 20, 20]);
+            frame.fill_rect(t % 56, 16, t % 56 + 8, 32, [230, 230, 230]);
+            writer.write(&frame).unwrap();
+        }
+        assert_eq!(writer.finish().unwrap(), 300);
+        let wanted: Vec<usize> = (0..300).step_by(2).collect();
+        let picked = frames_at(&path, &wanted).unwrap();
+        assert_eq!(picked.iter().map(|p| p.0).collect::<Vec<_>>(), wanted);
+        let even = frames_evenly(&path, 16).unwrap();
+        let indices: Vec<usize> = even.iter().map(|p| p.0).collect();
+        assert_eq!(indices, (0..16).map(|k| 9 + 18 * k).collect::<Vec<_>>());
+        // The frames are those frames: the bright block sits where frame `i` put it.
+        let block = |f: &Bgr| (0..64).find(|&x| f.pixel(x, 24)[1] > 128).unwrap();
+        for (i, frame) in &even {
+            assert!(block(frame).abs_diff((*i % 56) as u32) <= 1, "frame {i}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
 }

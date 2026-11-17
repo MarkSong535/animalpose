@@ -22,3 +22,12 @@ tracker:
   low_thresh: 0.2
   max_animals: null                # set to the cohort size (e.g. 2) to forbid new identities
   max_lost: 90
+# Multiview camera drift: each camera's session background is registered against its reference
+# picture (<cams>.references/) and the camera turned by the rotation found when that makes the two
+# agree better. These keys set how the registration runs, not how far a camera may move.
+drift:
+  enabled: true
+  coarsest: 64                     # smallest pyramid level, pixels across
+  iterations: 30                   # Gauss-Newton steps per level
+  samples: 40000                   # pixels per level at most
+  huber: 1.345                     # robust weight, in robust standard deviations
