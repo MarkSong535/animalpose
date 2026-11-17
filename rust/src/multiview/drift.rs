@@ -657,7 +657,13 @@ mod tests {
 
         let knock = rodrigues(&[0.0, 0.006, -0.004]);
         let now = picture(&turned(&cam, &knock), 1.0, 0.0);
-        let (cams, entries) = correct(&[cam.clone()], &[now], &refs, &DriftCfg::default()).unwrap();
+        let (cams, entries) = correct(
+            std::slice::from_ref(&cam),
+            &[now],
+            &refs,
+            &DriftCfg::default(),
+        )
+        .unwrap();
         assert_eq!(entries[0].status, "corrected", "{:?}", entries[0]);
         let error = norm3(&rotation_to_rvec(&mul3(
             &transpose3(&knock),
@@ -671,8 +677,13 @@ mod tests {
             height: 120,
             pixels: vec![0.0; 160 * 120],
         };
-        let (cams, entries) =
-            correct(&[cam.clone()], &[small], &refs, &DriftCfg::default()).unwrap();
+        let (cams, entries) = correct(
+            std::slice::from_ref(&cam),
+            &[small],
+            &refs,
+            &DriftCfg::default(),
+        )
+        .unwrap();
         assert_eq!(entries[0].status, "skipped");
         assert_eq!(cams[0], cam);
         std::fs::remove_dir_all(&dir).ok();

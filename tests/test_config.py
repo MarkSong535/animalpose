@@ -85,6 +85,12 @@ def test_a_base_that_is_not_there_says_so(tmp_path):
         load_config(child)
 
 
+def test_a_file_that_is_not_a_mapping_says_so(tmp_path):
+    path = write(tmp_path, "list.yaml", "- one\n- two\n")
+    with pytest.raises(ConfigError, match="must be a mapping"):
+        load_config(path)
+
+
 def test_two_files_extending_each_other_are_an_error(tmp_path):
     write(tmp_path, "a.yaml", "extends: b.yaml\n")
     write(tmp_path, "b.yaml", "extends: a.yaml\n")

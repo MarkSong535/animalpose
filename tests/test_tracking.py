@@ -15,6 +15,15 @@ def test_kalman_tracks_constant_velocity():
     np.testing.assert_allclose(pred, [30, 15, 40, 25], atol=0.5)
 
 
+def test_kalman_reports_the_velocity_it_estimates():
+    kf = BoxKalman(np.array([0, 0, 10, 10.0]))
+    for t in range(1, 15):
+        kf.predict()
+        kf.update(np.array([2 * t, t, 2 * t + 10, t + 10.0]))
+    kf.predict()
+    np.testing.assert_allclose(kf.velocity, [2.0, 1.0], atol=0.2)
+
+
 def _run(frames, drop=None, cfg=None):
     emb = ColorHistogramEmbedder()
     tracker = MultiAnimalTracker(cfg or TrackerConfig())
@@ -63,3 +72,10 @@ def test_pair_identity_carries_confident_labels_through_ambiguous_frames():
     # Without temporal support the evidence alone decides.
     _, swapped = resolve_pair_identity(kpts[10:20], -np.ones((10, 1)), [(0, 1)], scale=100.0)
     assert swapped.all()
+
+
+def test_pair_identity_passes_an_empty_track_through():
+    from animalpose.temporal.pairs import resolve_pair_identity
+
+    fixed, swapped = resolve_pair_identity(np.zeros((0, 2, 2)), np.zeros((0, 1)), [(0, 1)], scale=100.0)
+    assert fixed.shape == (0, 2, 2) and fixed.dtype == np.float32 and swapped.shape == (0, 1)

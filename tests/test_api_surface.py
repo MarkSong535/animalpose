@@ -442,7 +442,7 @@ def test_behavior_dispatches_to_the_three_cluster_steps(lab, tmp_path):
 
 
 def test_the_package_reexports_the_documented_verbs():
-    assert animalpose.__version__ == "0.1.0"
+    assert animalpose.__version__ == "1.0.0"
     assert all(hasattr(animalpose, name) for name in animalpose.__all__)
     assert callable(animalpose.Skeleton) and callable(animalpose.select_device)
     assert animalpose.CANONICAL is CANONICAL and animalpose.CANONICAL.num_keypoints == 25

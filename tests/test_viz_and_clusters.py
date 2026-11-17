@@ -3,6 +3,7 @@ kinematics that feed clustering, the cluster-to-behavior naming, and the ethogra
 
 import json
 import math
+import shutil
 
 import cv2
 import matplotlib
@@ -22,7 +23,7 @@ from animalpose.behavior.clusters import (
     parse_mapping,
     write_naming,
 )
-from animalpose.behavior.plot import clip, ethogram, plot_run
+from animalpose.behavior.plot import _Cv2Encoder, _encoder, clip, ethogram, plot_run
 from animalpose.pipeline import TrackResult, VideoResult
 from animalpose.skeleton import CANONICAL
 from animalpose.viz import color, draw_frame, draw_pose
@@ -265,6 +266,18 @@ def test_clip_zooms_on_the_animal_with_the_skeleton_and_behavior_panel(recording
     assert len(dim) == len(lit) == 9
     assert _colored(dim[0][:, :120]) < _colored(lit[0][:, :120])  # the shy nose: no dot, no limb to it
     assert np.abs(dim[0][:, 120:].astype(int) - lit[0][:, 120:].astype(int)).mean() < 1.0  # panel unchanged
+
+
+def test_without_ffmpeg_the_clip_falls_back_to_opencvs_writer(recording, tmp_path, monkeypatch):
+    """No `ffmpeg` executable: the same clip, encoded by `cv2.VideoWriter` instead of `libx264`."""
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert isinstance(_encoder(tmp_path / "enc.mp4", FPS, 420, 120), _Cv2Encoder)
+    z = np.load(recording["tracks"], allow_pickle=False)
+    out = clip(tmp_path / "clip.mp4", recording["video"], list(NAMES), z, 0.5, 1.0, 2, scale=2, half=30)
+    assert out == tmp_path / "clip.mp4" and out.stat().st_size > 1000
+    frames = _decoded(out)
+    assert len(frames) == 30 and frames[0].shape == (120, 420, 3)
+    assert plot_run(recording["dir"], recording["video"], clip_start=0.5, clip_seconds=1.0, top=2)
 
 
 def test_plot_run_writes_the_ethogram_and_clip_next_to_the_tracks(recording):

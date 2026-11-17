@@ -1,0 +1,94 @@
+# The experiment layer (`assay:`), with every key at its default. Add an `assay:` section to a
+# pipeline config (or pick the experiment in the app: Settings → Configs → Experiment) and the
+# results get an `assay/` folder: behavior_v3.csv (per frame), behavior_summary_v3.csv and
+# run_manifest.json. `animalpose assay --config <this> --analysis <folder>` reruns the rules on
+# finished analyses without the networks.
+#
+# Every distance is in body lengths (BL, the median nose-to-tail-base length while walking) or a
+# share of the arena; no rule uses pixels.
+extends: pipeline.yaml
+
+# Optional (spec L1): the SHA-256 each checkpoint must have; a mismatch stops before any video.
+# checksums:
+#   detector: <sha256>
+#   pose: <sha256>
+
+assay:
+  # open_field | plus_maze | three_chamber | grooming, or any name with `modules` listed.
+  experiment: open_field
+  # The rules to run (the preset's list when left out): open_field, plus_maze, contact, zones,
+  # grooming, rearing.
+  # modules: [open_field, grooming, rearing]
+  # Behavior states, highest priority first; states not listed come after, in module order.
+  priority: [mutual_contact, social, grooming, rearing]
+
+  arena:
+    rig: open_field          # zones are cached as zones/<rig>.json (+ .png to check by eye)
+    width: 1.0               # box width / length, in calibrated box units
+    top_view: ""             # camera names; empty picks them from the camera directions
+    side_view: ""
+
+  # Three-chamber cups, in box units (origin at the floor centre, x along the box, length 1).
+  cups:
+    - {name: L, center: [-0.33, 0.0], radius: 0.08, height: 0.15}
+    - {name: R, center: [0.33, 0.0], radius: 0.08, height: 0.15}
+
+  contact:
+    dist_bl: 0.05            # nose to nose, enter
+    exit_factor: 1.5         # leave above dist_bl × exit_factor
+    facing_deg: 60
+    sensitivity_bl: [0.10, 0.20, 0.30]
+    min_bout_s: 0.2
+    merge_gap_s: 0.2
+  cage:
+    occupied_frac: 0.20
+    kp_conf: 0.5
+    ear_conf: 0.3
+    inside_frac: 0.5         # share of its frames a side track spends in a cup to be its animal
+  maze:
+    bg_frames: 200
+    axis_tol_deg: 10
+    wall_ratio: 1.5
+    paw_conf: 0.5
+    head_dip_bl: 0.1
+    clahe_clip: 2.0
+    clahe_tiles: 8
+  zones:
+    dwell_s: 0.2             # time in a zone (or out of it) before the zone changes
+  openfield:
+    center_frac: 0.5
+    dwell_s: 0.2
+    strict: false            # also require head_center in the centre
+  groom:
+    speed_bl_s: 0.25
+    compact: 0.8
+    motion: 0.08
+    paw_speed_bl_s: 0.5
+    paw_bl: 0.25
+    nose_body_bl: 0.3
+    window_s: 1.0
+    min_bout_s: 1.5
+    merge_gap_s: 0.5
+    min_motion_fps: 15       # below this, only the posture gates apply
+    type_paw_bl: 0.2
+    type_sit_z_bl: 0.3
+    type_body_compact: 0.6
+  rear:
+    nose_z_bl: 0.65
+    paw_bl: 0.4
+    min_bout_s: 0.3
+    merge_gap_s: 0.2
+  features:
+    speed_window_s: 0.3      # Savitzky–Golay window of the body speed
+    paw_window_s: 0.1        # shorter for paws, so 3–8 Hz strokes survive
+    walk_speed_pct: 60
+    walk_nose_pct: 50
+  motion:
+    bg_diff: 25
+    frame_diff: 15
+    lag_s: 0.2
+    bg_frames: 200
+  gap:
+    max_fill_s: 0.5
+  qa:
+    min_valid3d: 0.8

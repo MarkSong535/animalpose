@@ -56,6 +56,10 @@ Thumbs.db
 *.npz
 *.npy
 !weights/*.pt
+# The sample bundle the desktop apps install on first launch (`samples/`, and the models zip):
+# plain git objects, not git-lfs (.gitattributes), so a source checkout runs the sample profiles
+# and `scripts/package_release.py models` can verify every SHA-256 in samples/manifest.json.
+!samples/**/*.pt
 !tests/fixtures/**/*.safetensors
 !tests/fixtures/**/*.pt
 !tests/fixtures/**/*.npz
@@ -89,6 +93,9 @@ tests/fixtures/models/detector_general.safetensors
 !/configs/temporal3d.yaml
 !/configs/behavior.yaml
 !/configs/behavior3d.yaml
+# The documented assay defaults: read by the assay test and pointed at by README and
+# docs/new_experiment.md.
+!/configs/assay_example.yaml
 /scripts/train_real.sh
 /scripts/pseudo_label_mirror.py
 /tests/fixtures/models/*_cai.*

@@ -34,7 +34,7 @@ from animalpose.skeleton import CANONICAL, Skeleton
 
 __all__ = ["CANONICAL", "Skeleton", "cluster_tracks", "finetune", "label", "label_clusters", "predict",
            "select_device", "train", "write_naming"]
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 
 def __getattr__(name: str):
