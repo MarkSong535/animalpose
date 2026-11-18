@@ -42,8 +42,6 @@ jobs:
             os: ubuntu-22.04
           - target: linux-aarch64
             os: ubuntu-22.04-arm
-          - target: macos-x86_64
-            os: macos-15-intel
           - target: macos-aarch64
             os: macos-15
           - target: windows-x86_64
@@ -65,9 +63,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang libclang-dev pkg-config libgl1-mesa-dev \
             libwayland-dev libxkbcommon-dev file nasm rpm xvfb xauth libgl1-mesa-dri
-      - name: Install the JPEG assembler (Intel macOS)
-        if: runner.os == 'macOS' && runner.arch == 'X64'
-        run: command -v nasm || brew install nasm
       - name: Install the JPEG assembler (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -137,23 +132,64 @@ jobs:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: pyproject.toml
+      # The package is pure Python: one py3-none-any wheel installs on every OS and CPU, and
+      # python-test below proves that on each platform before anything is published.
       - name: Build and verify Python distributions
         run: |
           python -m pip install build twine
           python -m build --outdir dist/python
           python -m twine check --strict dist/python/*
-      - name: Install and test the wheel
-        run: |
-          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install dist/python/*.whl
-          cd "$RUNNER_TEMP"
-          animalpose --help
-          python -c 'from importlib.resources import files; assert files("animalpose.behavior").joinpath("behaviors.json").is_file()'
+          ls dist/python/animalpose-*-py3-none-any.whl dist/python/animalpose-*.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: animalpose-python
           path: dist/python/*
           if-no-files-found: error
+
+  python-test:
+    name: Python wheel on ${{ matrix.platform }} (Python ${{ matrix.python }})
+    needs: python
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux-x86_64, os: ubuntu-24.04, python: '3.10'}
+          - {platform: linux-x86_64, os: ubuntu-24.04, python: '3.13'}
+          - {platform: linux-aarch64, os: ubuntu-24.04-arm, python: '3.13'}
+          - {platform: macos-aarch64, os: macos-15, python: '3.10'}
+          - {platform: macos-aarch64, os: macos-15, python: '3.13'}
+          - {platform: windows-x86_64, os: windows-2022, python: '3.10'}
+          - {platform: windows-x86_64, os: windows-2022, python: '3.13'}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: ./.github/actions/setup-ffmpeg
+      - uses: actions/download-artifact@v4
+        with:
+          name: animalpose-python
+          path: dist/python
+      - name: Install the CPU build of PyTorch (Linux; the default one bundles CUDA)
+        if: runner.os == 'Linux'
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install the wheel and predict with the general models
+        shell: bash
+        run: |
+          python -m pip install dist/python/animalpose-*-py3-none-any.whl
+          work="$RUNNER_TEMP/wheel-smoke"
+          mkdir -p "$work"
+          cp -R configs weights "$work/"
+          cd "$work"  # away from the checkout, so src/ cannot stand in for the installed wheel
+          python -c 'import animalpose, pathlib; f = pathlib.Path(animalpose.__file__); print(f); assert "site-packages" in f.parts'
+          python -c 'from importlib.resources import files; assert files("animalpose.behavior").joinpath("behaviors.json").is_file()'
+          animalpose --help
+          animalpose predict --synthetic --max-frames 2 --out result
+          test -s result/tracks.csv
+          test -s result/overlay.mp4
 
   models:
     name: Shared models, configs and license
@@ -174,7 +210,7 @@ jobs:
 
   publish:
     name: Verify assets and publish tagged release
-    needs: [version, native, python, models]
+    needs: [version, native, python, python-test, models]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -207,3 +243,25 @@ jobs:
             gh release upload "$TAG" release-assets/* --clobber
             gh release edit "$TAG" --draft=false
           fi
+
+  pypi:
+    name: Publish to PyPI
+    # After the GitHub release, so a failed build or test never reaches PyPI (an upload is permanent).
+    needs: [version, publish]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    # Trusted publishing: no token. On pypi.org the project's publisher is this repository,
+    # workflow release.yml and environment pypi.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/animalpose/${{ needs.version.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: animalpose-python
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true  # a rerun after a partial upload finishes the rest

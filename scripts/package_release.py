@@ -204,6 +204,8 @@ def native(binaries, dest):
     arch = platform.machine().lower()
     arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(arch, arch)
     label = {"linux": "linux", "darwin": "macos", "windows": "windows"}[system]
+    if system == "darwin" and arch != "aarch64":
+        raise ValueError(f"macOS packages are for Apple Silicon only, not {arch}")
     suffix = ".exe" if system == "windows" else ""
     cli = binaries / f"animalpose{suffix}"
     version = subprocess.check_output([cli, "--version"], text=True).strip()

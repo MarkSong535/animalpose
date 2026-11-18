@@ -28,7 +28,7 @@ Needs FFmpeg (`ffmpeg`, `ffprobe`) for video and Git LFS for the general weights
 
 ```bash
 git lfs pull
-pip install -e ".[dev]"                                    # Python 3.10+
+pip install animalpose                                     # Python 3.10+; from a checkout: pip install -e ".[dev]"
 animalpose predict --video myvideo.mp4 --out outputs/run
 ```
 
@@ -46,9 +46,10 @@ cd rust && cargo run --release --features gui --bin animalpose-gui    # Windows,
 cd macos && ./build-app.sh && open build/AnimalPose.app                # native macOS app (SwiftUI)
 ```
 
-The macOS app needs Rust and Xcode (Swift 6) to build and runs on macOS 14+; Liquid Glass needs
-Xcode 26 and macOS 26. Prebuilt CLI, apps (`.dmg`, `.exe`, `.deb`, `.rpm`) and the models zip are on
-GitHub Releases: extract `animalpose-models-v<version>.zip` into `~/.animalpose`.
+macOS means Apple Silicon (no Intel Macs). The macOS app needs Rust and Xcode (Swift 6) to build and
+runs on macOS 14+; Liquid Glass needs Xcode 26 and macOS 26. Prebuilt CLI, apps (`.dmg`, `.exe`, `.deb`,
+`.rpm`) and the models zip are on GitHub Releases: extract `animalpose-models-v<version>.zip` into
+`~/.animalpose`.
 
 ## Using the app
 
@@ -149,7 +150,8 @@ are marked `// differs from Python:`. Rust features: `app` (engine), `gui` (egui
 the minimum supported Rust is 1.77. Rebuild the sample profiles with `scripts/build_samples.py`, and
 the app icons (macOS `.icns`, window `.png`, Windows `.ico`) from `docs/icons/minimal.svg` with
 `scripts/make_icons.sh` (macOS).
-Releases: **Actions → Release → Run workflow** builds every package; a `v1.0.0`-style tag publishes them.
+Releases: **Actions → Release → Run workflow** builds and tests every package; a `v1.0.0`-style tag
+publishes them to GitHub Releases and PyPI (trusted publisher: `release.yml`, environment `pypi`).
 
 ## License
 
