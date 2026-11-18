@@ -4,6 +4,6 @@
 # the runner's `stable` toolchain (see .github/workflows/ci.yml), which may
 # report formatting or lint differences until the pin is bumped.
 [toolchain]
-channel = "1.88.0"
+channel = "1.100.0"
 components = ["rustfmt", "clippy"]
 targets = []

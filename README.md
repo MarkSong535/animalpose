@@ -145,11 +145,11 @@ cargo clippy --features ffi --all-targets -- -D warnings
 Python is the reference: Rust tests compare against torch/NumPy dumps in `tests/fixtures` (networks
 within 5e-5, pipeline keypoints within 1e-3 px, checkpoints bit-exact), and intentional differences
 are marked `// differs from Python:`. Rust features: `app` (engine), `gui` (egui window, includes
-`mps`), `ffi` (static library for the macOS app), `mps` (Metal). `rust-toolchain.toml` pins 1.88.0;
+`mps`), `ffi` (static library for the macOS app), `mps` (Metal). `rust-toolchain.toml` pins 1.100.0;
 the minimum supported Rust is 1.77. Rebuild the sample profiles with `scripts/build_samples.py`, and
 the app icons (macOS `.icns`, window `.png`, Windows `.ico`) from `docs/icons/minimal.svg` with
 `scripts/make_icons.sh` (macOS).
-Releases: **Actions → Release → Run workflow** builds every package; a `v0.1.0`-style tag publishes them.
+Releases: **Actions → Release → Run workflow** builds every package; a `v1.0.0`-style tag publishes them.
 
 ## License
 

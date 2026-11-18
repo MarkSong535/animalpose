@@ -408,12 +408,9 @@ pub(crate) fn process_items(
     if let [item] = videos {
         control.begin_clip(item.label.clone());
         let name = free_name(target, &format!("{}-analysis", item.name));
-        let result = processing::save_output(target, &name, Some(&name), |dir| {
-            log.start_job(&dir.join("animalpose.log"));
-            run(item, dir)
-        });
-        log.end_job();
-        let dir = result?;
+        let dir = processing::save_output(target, &name, Some(&name), |dir| {
+            log.during_job(&dir.join("animalpose.log"), || run(item, dir))
+        })?;
         control.advance();
         let mut status = String::from("Analysis finished.");
         for warning in warnings.borrow().iter() {
@@ -1530,19 +1527,18 @@ impl Engine {
                 ));
                 for (stage, clips) in groups {
                     processing::save_output(&stage, "analysis", Some("analysis"), |dir| {
-                        log.start_job(&dir.join("animalpose.log"));
-                        let done = process_views(
-                            &files,
-                            &clips,
-                            rig.as_ref(),
-                            dir,
-                            Some(control),
-                            &models,
-                            Some(&log),
-                            &zones,
-                        );
-                        log.end_job();
-                        done
+                        log.during_job(&dir.join("animalpose.log"), || {
+                            process_views(
+                                &files,
+                                &clips,
+                                rig.as_ref(),
+                                dir,
+                                Some(control),
+                                &models,
+                                Some(&log),
+                                &zones,
+                            )
+                        })
                     })?;
                 }
                 Ok(Outcome {

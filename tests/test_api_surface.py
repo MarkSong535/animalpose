@@ -17,6 +17,7 @@ import io
 import json
 import runpy
 import sys
+from importlib.metadata import version as dist_version
 from pathlib import Path
 
 import cv2
@@ -442,7 +443,7 @@ def test_behavior_dispatches_to_the_three_cluster_steps(lab, tmp_path):
 
 
 def test_the_package_reexports_the_documented_verbs():
-    assert animalpose.__version__ == "1.0.0"
+    assert animalpose.__version__ == dist_version("animalpose")  # the module and the wheel agree
     assert all(hasattr(animalpose, name) for name in animalpose.__all__)
     assert callable(animalpose.Skeleton) and callable(animalpose.select_device)
     assert animalpose.CANONICAL is CANONICAL and animalpose.CANONICAL.num_keypoints == 25

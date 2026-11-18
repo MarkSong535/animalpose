@@ -53,6 +53,15 @@ impl Log {
     pub(crate) fn end_job(&self) {
         *self.job.lock().unwrap() = None;
     }
+
+    /// Runs `work` with its lines copied into `path`, closing that file before returning: Windows
+    /// cannot rename a folder while a file in it is open, and the result folder is renamed next.
+    pub(crate) fn during_job<T>(&self, path: &Path, work: impl FnOnce() -> T) -> T {
+        self.start_job(path);
+        let result = work();
+        self.end_job();
+        result
+    }
 }
 
 /// `("2026-11-16", "17:18:37")` in UTC.
@@ -102,5 +111,11 @@ mod tests {
         assert!(copy.lines().all(|l| l.contains("Z ")));
         let daily = fs::read_dir(dir.path().join("logs")).unwrap().count();
         assert_eq!(daily, 1);
+
+        assert_eq!(log.during_job(&job, || 7), 7);
+        assert!(
+            log.job.lock().unwrap().is_none(),
+            "the job's copy is closed"
+        );
     }
 }

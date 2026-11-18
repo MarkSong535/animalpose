@@ -122,7 +122,7 @@ impl Palette {
     fn glass(&self, radius: f32) -> egui::Frame {
         egui::Frame::none()
             .fill(self.glass)
-            .stroke(Stroke::new(1.0, self.glass_rim))
+            .stroke(Stroke::new(1.0_f32, self.glass_rim))
             .rounding(radius)
             .shadow(egui::epaint::Shadow {
                 offset: vec2(0.0, 8.0),
@@ -495,7 +495,7 @@ impl App {
         ui.painter().hline(
             rect.x_range(),
             rect.bottom() - 0.5,
-            Stroke::new(1.0, pal.separator),
+            Stroke::new(1.0_f32, pal.separator),
         );
         let mut bar = ui.new_child(
             egui::UiBuilder::new()
@@ -1160,7 +1160,7 @@ impl App {
         ui.painter().hline(
             rect.x_range(),
             rect.bottom(),
-            Stroke::new(1.0, pal.separator),
+            Stroke::new(1.0_f32, pal.separator),
         );
         let tabs = [
             (Tab::General, "⚙", "General"),
@@ -1309,7 +1309,7 @@ impl App {
                 let height = (ui.available_height() - 48.0).max(120.0);
                 egui::Frame::none()
                     .fill(pal.group)
-                    .stroke(Stroke::new(1.0, pal.separator))
+                    .stroke(Stroke::new(1.0_f32, pal.separator))
                     .rounding(8.0)
                     .inner_margin(egui::Margin::same(4.0))
                     .show(ui, |ui| {
@@ -1907,8 +1907,11 @@ fn section_header(ui: &mut Ui, pal: &Palette, title: &str) {
 fn separator(ui: &mut Ui, pal: &Palette) {
     ui.add_space(4.0);
     let y = ui.cursor().top();
-    ui.painter()
-        .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, pal.separator));
+    ui.painter().hline(
+        ui.max_rect().x_range(),
+        y,
+        Stroke::new(1.0_f32, pal.separator),
+    );
     ui.add_space(10.0);
 }
 
@@ -1930,7 +1933,7 @@ fn prominent_button(ui: &mut Ui, text: &str, enabled: bool, color: Color32) -> R
 fn glass_button(ui: &mut Ui, pal: &Palette, text: &str, enabled: bool) -> Response {
     let button = egui::Button::new(RichText::new(text).size(13.0))
         .fill(pal.control)
-        .stroke(Stroke::new(1.0, pal.glass_rim.gamma_multiply(0.6)))
+        .stroke(Stroke::new(1.0_f32, pal.glass_rim.gamma_multiply(0.6)))
         .rounding(Rounding::same(14.0))
         .min_size(vec2(0.0, 28.0));
     ui.add_enabled(enabled, button)
@@ -2040,7 +2043,7 @@ fn glass_capsule(
     ui.painter().add(shadow.as_shape(rect, radius));
     ui.painter().rect_filled(rect, radius, pal.glass);
     ui.painter()
-        .rect_stroke(rect, radius, Stroke::new(1.0, pal.glass_rim));
+        .rect_stroke(rect, radius, Stroke::new(1.0_f32, pal.glass_rim));
     let mut x = rect.left() + 11.0;
     if let Some(color) = dot {
         ui.painter()
@@ -2138,7 +2141,7 @@ fn video_row(
     ui.painter().hline(
         (rect.left() + 40.0)..=rect.right(),
         rect.bottom() + 0.5,
-        Stroke::new(1.0, pal.separator),
+        Stroke::new(1.0_f32, pal.separator),
     );
     if let Some(camera) = camera {
         let galley =
@@ -2249,7 +2252,7 @@ fn group(ui: &mut Ui, pal: &Palette, title: Option<&str>, add: impl FnOnce(&mut 
     }
     egui::Frame::none()
         .fill(pal.group)
-        .stroke(Stroke::new(1.0, pal.separator))
+        .stroke(Stroke::new(1.0_f32, pal.separator))
         .rounding(10.0)
         .inner_margin(egui::Margin::symmetric(12.0, 2.0))
         .show(ui, |ui| {
@@ -2264,8 +2267,11 @@ fn group(ui: &mut Ui, pal: &Palette, title: Option<&str>, add: impl FnOnce(&mut 
 fn row(ui: &mut Ui, pal: &Palette, rows: &mut usize, label: &str, control: impl FnOnce(&mut Ui)) {
     if *rows > 0 {
         let y = ui.cursor().top();
-        ui.painter()
-            .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, pal.separator));
+        ui.painter().hline(
+            ui.max_rect().x_range(),
+            y,
+            Stroke::new(1.0_f32, pal.separator),
+        );
     }
     *rows += 1;
     ui.allocate_ui_with_layout(
@@ -2410,7 +2416,7 @@ fn style(ctx: &egui::Context) {
             let v = &mut style.visuals;
             v.panel_fill = pal.content;
             v.window_fill = pal.content;
-            v.window_stroke = Stroke::new(1.0, pal.separator);
+            v.window_stroke = Stroke::new(1.0_f32, pal.separator);
             v.window_rounding = Rounding::same(12.0);
             v.menu_rounding = Rounding::same(8.0);
             v.window_shadow = egui::epaint::Shadow {
@@ -2432,7 +2438,7 @@ fn style(ctx: &egui::Context) {
             };
             v.faint_bg_color = pal.group;
             v.selection.bg_fill = ACCENT.gamma_multiply(0.45);
-            v.selection.stroke = Stroke::new(1.0, ACCENT);
+            v.selection.stroke = Stroke::new(1.0_f32, ACCENT);
             v.hyperlink_color = ACCENT;
             v.slider_trailing_fill = true;
             v.override_text_color = Some(pal.text());
@@ -2449,7 +2455,7 @@ fn style(ctx: &egui::Context) {
                 w.expansion = 0.0;
             }
             v.widgets.noninteractive.rounding = Rounding::same(7.0);
-            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, pal.separator);
+            v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, pal.separator);
             v.widgets.active.bg_fill = ACCENT;
         });
     }
@@ -2551,7 +2557,7 @@ impl eframe::App for App {
         self.banner(ctx, area);
         if hovering {
             ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::new("drop")))
-                .rect_stroke(area.shrink(8.0), 18.0, Stroke::new(3.0, ACCENT));
+                .rect_stroke(area.shrink(8.0), 18.0, Stroke::new(3.0_f32, ACCENT));
         }
         if self.settings_open {
             self.settings(ctx, frame);
