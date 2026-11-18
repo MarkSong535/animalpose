@@ -25,6 +25,18 @@ sed "s/@VERSION@/$version/g" Info.plist > "$app/Contents/Info.plist"
 # launch. Checked where they ship: hashes, then every profile installed, loaded and run.
 cp -R ../samples "$app/Contents/Resources/samples"
 ../rust/target/release/animalpose samples check "$app/Contents/Resources/samples"
+# The general models (the default pipeline): configs/ beside weights/, as in the repository.
+mkdir -p "$app/Contents/Resources/configs" "$app/Contents/Resources/weights"
+for name in pipeline detector pose temporal temporal3d behavior behavior3d; do
+    cp "../configs/$name.yaml" "$app/Contents/Resources/configs/"
+done
+for model in detector pose temporal behavior; do
+    if head -c 24 "../weights/${model}_general.pt" | grep -q "git-lfs"; then
+        echo "../weights/${model}_general.pt is a git-lfs pointer. Run \`git lfs pull\`." >&2
+        exit 1
+    fi
+    cp "../weights/${model}_general.pt" "$app/Contents/Resources/weights/"
+done
 codesign --force --sign - "$app"
 codesign --verify --strict "$app"
 echo "$app"

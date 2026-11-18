@@ -24,7 +24,9 @@ detection, top-down pose, Kalman + Hungarian tracking, LSTM refinement and TCN b
 
 ## Install and run
 
-Needs FFmpeg (`ffmpeg`, `ffprobe`) for video and Git LFS for the general weights in `weights/`.
+Needs FFmpeg (`ffmpeg`, `ffprobe`) for video: on `PATH`, or beside the app (e.g. `ffmpeg.exe` and
+`ffprobe.exe` in the Windows app's folder). The desktop apps on GitHub Releases ship the general
+models and sample profiles; a checkout needs Git LFS for the general weights in `weights/`.
 
 ```bash
 git lfs pull
@@ -47,9 +49,10 @@ cd macos && ./build-app.sh && open build/AnimalPose.app                # native 
 ```
 
 macOS means Apple Silicon (no Intel Macs). The macOS app needs Rust and Xcode (Swift 6) to build and
-runs on macOS 14+; Liquid Glass needs Xcode 26 and macOS 26. Prebuilt CLI, apps (`.dmg`, `.exe`, `.deb`,
-`.rpm`) and the models zip are on GitHub Releases: extract `animalpose-models-v<version>.zip` into
-`~/.animalpose`.
+runs on macOS 14+; Liquid Glass needs Xcode 26 and macOS 26. GitHub Releases has the desktop app
+(`.dmg`, Windows `.zip`, `.deb`, `.rpm`, Linux `.tar.gz`), the CLI and the models zip; for the CLI,
+extract `animalpose-models-v<version>.zip` into `~/.animalpose` (with the Linux desktop package
+installed, the CLI uses its models).
 
 ## Using the app
 

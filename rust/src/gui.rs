@@ -2596,6 +2596,8 @@ pub fn run() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("AnimalPose")
+            // Linux docks match the window to `animalpose-gui.desktop` (and its icon) by this id.
+            .with_app_id("animalpose-gui")
             .with_inner_size([1180.0, 760.0])
             .with_min_inner_size([820.0, 540.0])
             .with_drag_and_drop(true)

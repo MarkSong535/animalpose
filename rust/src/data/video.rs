@@ -4,9 +4,9 @@
 //! The Python package decodes with `cv2.VideoCapture` and writes with `cv2.VideoWriter`
 //! (`src/animalpose/frames.py`, `api.py:write_video`) and already shells out to `ffprobe` for
 //! timestamps (`frames.py:frame_timestamps`). Here both directions go through the ffmpeg command
-//! line, so the crate keeps building without a C toolchain; `ffmpeg` and `ffprobe` must be on `PATH`
-//! (or named by `ANIMALPOSE_FFMPEG` / `ANIMALPOSE_FFPROBE`) only when a video file is actually read
-//! or written.
+//! line, so the crate keeps building without a C toolchain. The executables are needed only when a
+//! video file is actually read or written, and are found in order: `ANIMALPOSE_FFMPEG` /
+//! `ANIMALPOSE_FFPROBE`, beside the running executable (see [`bundled_tool`]), then `PATH`.
 //!
 //! `// differs from Python:` frames are converted to BGR by ffmpeg's `swscale` (`-pix_fmt bgr24`),
 //! where OpenCV uses its own YUV→BGR conversion; the two agree to within a grey level or two.
@@ -33,8 +33,21 @@ pub fn is_video(path: &Path) -> bool {
     VIDEO_EXT.contains(&ext.as_str())
 }
 
-fn tool(env: &str, default: &str) -> PathBuf {
-    std::env::var_os(env).map_or_else(|| PathBuf::from(default), PathBuf::from)
+fn tool(env: &str, name: &str) -> PathBuf {
+    if let Some(path) = std::env::var_os(env) {
+        return path.into();
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| bundled_tool(exe.parent()?, name))
+        .unwrap_or_else(|| PathBuf::from(name))
+}
+
+/// `name` placed beside the executable in `exe_dir`, e.g. `ffmpeg.exe` and `ffprobe.exe` copied
+/// into the Windows app's folder, so it needs no FFmpeg on `PATH`.
+fn bundled_tool(exe_dir: &Path, name: &str) -> Option<PathBuf> {
+    let path = exe_dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    path.is_file().then_some(path)
 }
 
 fn ffmpeg() -> PathBuf {
@@ -515,6 +528,22 @@ mod tests {
         assert!(is_video(Path::new("clip.avi")));
         assert!(!is_video(Path::new("frames/0001.png")));
         assert!(!is_video(Path::new("frames")));
+    }
+
+    /// An ffmpeg beside the executable is used; one elsewhere is not.
+    #[test]
+    fn an_ffmpeg_beside_the_executable_is_found() {
+        let root = std::env::temp_dir().join(format!("ap-bundled-ffmpeg-{}", std::process::id()));
+        let file = format!("ffmpeg{}", std::env::consts::EXE_SUFFIX);
+        let app = root.join("app");
+        std::fs::create_dir_all(app.join("bin")).unwrap();
+        assert_eq!(bundled_tool(&app, "ffmpeg"), None);
+        std::fs::write(app.join("bin").join(&file), b"").unwrap();
+        assert_eq!(bundled_tool(&app, "ffmpeg"), None);
+        std::fs::write(app.join(&file), b"").unwrap();
+        assert_eq!(bundled_tool(&app, "ffmpeg"), Some(app.join(&file)));
+        assert_eq!(bundled_tool(&app, "ffprobe"), None);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// Write a clip, probe it, stream it back, pick frames out of it and read its timestamps.

@@ -34,8 +34,10 @@ rayon = "1.10"
 # `.tar.gz` downloads (`animalpose data download`); the pure-Rust `miniz_oxide` backend.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
-# `--features gui`: egui with the native OpenGL backend, and nokhwa for USB cameras.
-eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow"] }
+# `--features gui`: egui with the native OpenGL backend, and nokhwa for USB cameras. `wayland` and
+# `x11` hand the window's app id to the Linux desktop, which takes the dock icon from the matching
+# `animalpose-gui.desktop` (Wayland has no window icons of its own).
+eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 nokhwa = { version = "0.10", optional = true, features = ["input-native"] }
 rfd = { version = "0.15", optional = true }
 tempfile = { version = "3", optional = true }

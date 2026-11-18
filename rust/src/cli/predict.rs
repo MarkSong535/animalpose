@@ -1388,16 +1388,27 @@ pub(crate) fn default_pipeline_config() -> PathBuf {
     if local.is_file() {
         return local;
     }
-    let bundle = std::env::home_dir().map(|home| home.join(".animalpose"));
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(Path::to_path_buf));
-    [exe_dir, bundle]
+    let mut roots = exe_dir.map_or_else(Vec::new, |dir| bundle_roots(&dir));
+    roots.extend(std::env::home_dir().map(|home| home.join(".animalpose")));
+    roots
         .into_iter()
-        .flatten()
         .map(|root| root.join(DEFAULT_PIPELINE_CONFIG))
         .find(|path| path.is_file())
         .unwrap_or_else(|| repo_path(DEFAULT_PIPELINE_CONFIG))
+}
+
+/// Where a package keeps the general models (`configs/` and `weights/` side by side) for the
+/// executable in `exe_dir`: beside it (the Windows and Linux archives), the macOS app's
+/// `Contents/Resources`, or a Linux package's `/usr/share/animalpose`.
+fn bundle_roots(exe_dir: &Path) -> Vec<PathBuf> {
+    vec![
+        exe_dir.to_path_buf(),
+        exe_dir.join("../Resources"),
+        exe_dir.join("../share/animalpose"),
+    ]
 }
 
 pub(crate) fn checkpoint_path(cfg: &Config, path: &str) -> PathBuf {
@@ -1912,6 +1923,47 @@ mod tests {
         crate::data::repo_root()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(rel)
+    }
+
+    /// The general models a package ships are found from its executable: in a Linux package's
+    /// `share/animalpose`, the macOS app's `Resources` and beside a Windows or Linux archive's
+    /// executable; the config's checkpoints resolve inside the same package.
+    #[test]
+    fn a_packages_general_models_are_found_from_its_executable() {
+        let root = temp_dir("bundle");
+        for (exe_dir, data) in [
+            ("usr/bin", "usr/share/animalpose"),
+            (
+                "AnimalPose.app/Contents/MacOS",
+                "AnimalPose.app/Contents/Resources",
+            ),
+            ("archive", "archive"),
+        ] {
+            let (exe_dir, data) = (root.join(exe_dir), root.join(data));
+            std::fs::create_dir_all(&exe_dir).unwrap();
+            std::fs::create_dir_all(data.join("configs")).unwrap();
+            std::fs::create_dir_all(data.join("weights")).unwrap();
+            std::fs::copy(
+                repo_file(DEFAULT_PIPELINE_CONFIG),
+                data.join(DEFAULT_PIPELINE_CONFIG),
+            )
+            .unwrap();
+            std::fs::write(data.join("weights/detector_general.pt"), b"").unwrap();
+            let config = bundle_roots(&exe_dir)
+                .into_iter()
+                .map(|root| root.join(DEFAULT_PIPELINE_CONFIG))
+                .find(|path| path.is_file())
+                .expect("the package's pipeline config is found");
+            let cfg = Config::load(&config, &[]).expect("the config loads");
+            let detector = cfg.str_at("checkpoints.detector", "");
+            assert_eq!(
+                checkpoint_path(&cfg, &detector).canonicalize().unwrap(),
+                data.join("weights/detector_general.pt")
+                    .canonicalize()
+                    .unwrap()
+            );
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// `configs/pipeline.yaml`'s `pipeline:` and `tracker:` blocks.

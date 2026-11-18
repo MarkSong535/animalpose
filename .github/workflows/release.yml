@@ -94,10 +94,17 @@ jobs:
       - name: Test RPM installation on Fedora
         if: runner.os == 'Linux'
         run: |
+          # A clean system without the checkout: prediction must run on the general models the
+          # desktop package ships. FFmpeg with libx264 comes from RPM Fusion, as users install it.
           docker run --rm -v "$PWD/dist/native:/packages:ro" fedora:44 bash -ec '
-            dnf install -y /packages/*.rpm
+            dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm
+            dnf install -y --allowerasing /packages/*.rpm ffmpeg
             animalpose --version
             test -x /usr/bin/animalpose-gui
+            cd "$(mktemp -d)"
+            animalpose predict --synthetic --max-frames 2 --out result
+            test -s result/tracks.csv
+            test -s result/overlay.mp4
           '
       - name: Verify prediction with the packaged models
         shell: bash
