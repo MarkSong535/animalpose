@@ -28,6 +28,19 @@ def test_detector_targets_decode_roundtrip():
         assert torch.min((found - b).abs().max(-1).values) < 1e-3
 
 
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs Apple Metal (MPS)")
+def test_the_export_ranking_runs_on_metal_like_on_the_cpu():
+    """MPS has no float64: the tie-breaking ranking moves the scores to the CPU before widening them."""
+    boxes = [torch.tensor([[10.3, 20.7, 60.1, 50.9], [100.0, 30.0, 140.0, 90.0]])]
+    tgt = build_targets(boxes, (32, 40), 4)
+    heat = torch.where(tgt["heat"] == 1, 10.0, -10.0)
+    cpu = decode(heat, tgt["size"], tgt["offset"], 4, max_det=5, for_export=True)
+    mps = decode(heat.to("mps"), tgt["size"].to("mps"), tgt["offset"].to("mps"), 4, max_det=5, for_export=True)
+    assert mps[0].device.type == "mps"
+    for a, b in zip(cpu, mps):
+        assert torch.allclose(a.float(), b.cpu().float(), atol=1e-4)
+
 def test_detector_forward_loss_backward(tiny_backbone):
     model = CenterDetector(tiny_backbone, num_species=2)
     x = torch.rand(2, 3, 64, 96)

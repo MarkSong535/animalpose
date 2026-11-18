@@ -18,7 +18,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify package metadata and tag
         id: version
         shell: bash
@@ -50,10 +50,10 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - uses: ./.github/actions/setup-ffmpeg
@@ -115,7 +115,7 @@ jobs:
           "../animalpose$EXE_SUFFIX" predict --synthetic --max-frames 2 --out result
           test -s result/tracks.csv
           test -s result/overlay.mp4
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: animalpose-${{ matrix.target }}
           path: dist/native/*
@@ -126,8 +126,8 @@ jobs:
     needs: version
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
@@ -140,7 +140,7 @@ jobs:
           python -m build --outdir dist/python
           python -m twine check --strict dist/python/*
           ls dist/python/animalpose-*-py3-none-any.whl dist/python/animalpose-*.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: animalpose-python
           path: dist/python/*
@@ -162,20 +162,20 @@ jobs:
           - {platform: windows-x86_64, os: windows-2022, python: '3.10'}
           - {platform: windows-x86_64, os: windows-2022, python: '3.13'}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - uses: ./.github/actions/setup-ffmpeg
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: animalpose-python
           path: dist/python
       - name: Install the CPU build of PyTorch (Linux; the default one bundles CUDA)
         if: runner.os == 'Linux'
-        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+        run: python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Install the wheel and predict with the general models
         shell: bash
         run: |
@@ -196,13 +196,13 @@ jobs:
     needs: version
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: |
           python3 scripts/package_release.py models --out dist/models
           cp LICENSE dist/models/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: animalpose-models
           path: dist/models/*
@@ -215,7 +215,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: animalpose-*
           merge-multiple: true
@@ -223,7 +223,7 @@ jobs:
       - name: Generate SHA-256 checksums
         working-directory: release-assets
         run: sha256sum * > SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-checksums
           path: release-assets/SHA256SUMS
@@ -258,7 +258,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: animalpose-python
           path: dist

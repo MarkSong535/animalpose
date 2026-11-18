@@ -381,3 +381,26 @@ fn the_example_config_spells_out_the_defaults() {
     example.cups.clear();
     assert_eq!(example, defaults("open_field"));
 }
+
+/// What quick writes look like on Windows: the same length and the same modification time. The
+/// second write must still be hashed afresh, or a checksum check passes stale contents.
+#[test]
+fn a_rewrite_with_the_same_size_and_time_is_hashed_again() {
+    use super::output::sha256_cached;
+    let dir = std::env::temp_dir().join(format!("ap-hash-cache-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("a.yaml");
+    let stamp = std::time::SystemTime::now();
+    let write = |text: &str| {
+        std::fs::write(&path, text).unwrap();
+        let file = std::fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(stamp).unwrap();
+    };
+    write("device: cpu\n");
+    let first = sha256_cached(&path).unwrap();
+    write("device: mps\n");
+    let second = sha256_cached(&path).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(second, crate::cli::download::sha256_file(&path).unwrap());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

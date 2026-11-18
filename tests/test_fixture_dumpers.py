@@ -492,7 +492,7 @@ def test_random_weights_follow_the_initialisation_scale_and_the_seed():
     behaviour = build_model("behavior", {"num_keypoints": 25, "dims": 2, "hidden": 6, "classes": ["a", "b"],
                                          "dropout": 0.0})
     models.random_weights(behaviour, 3)
-    named = dict(behaviour.named_parameters())
+    named = {n: t.detach() for n, t in behaviour.named_parameters()}
     gamma = {n: t for n, t in named.items() if ".norm." in n and n.endswith(".weight")}
     beta = {n: t for n, t in named.items() if ".norm." in n and n.endswith(".bias")}
     assert gamma and all(bool(((v >= 0.6) & (v <= 1.4)).all()) for v in gamma.values())

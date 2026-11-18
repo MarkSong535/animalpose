@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context as _, Result};
 use serde_json::{json, Value};
@@ -36,6 +36,11 @@ use crate::algos::image::Image;
 /// The hex SHA-256 of a file, computed once per path, size and modification time.
 type HashCache = Option<HashMap<(PathBuf, u64, SystemTime), String>>;
 
+/// How long ago a file must have been modified before its hash is remembered. A file written
+/// again within the clock's resolution keeps its time (Windows, quick writes of the same length),
+/// so a hash is cached only once a later write would show (Git's "racily clean" rule).
+const SETTLED: Duration = Duration::from_secs(2);
+
 pub fn sha256_cached(path: &Path) -> Result<String> {
     static CACHE: Mutex<HashCache> = Mutex::new(None);
     let meta = fs::metadata(path).with_context(|| format!("cannot read {}", path.display()))?;
@@ -44,11 +49,16 @@ pub fn sha256_cached(path: &Path) -> Result<String> {
         return Ok(hit.clone());
     }
     let hash = crate::cli::download::sha256_file(path)?;
-    CACHE
-        .lock()
-        .unwrap()
-        .get_or_insert_with(HashMap::new)
-        .insert(key, hash.clone());
+    let settled = SystemTime::now()
+        .duration_since(key.2)
+        .is_ok_and(|age| age >= SETTLED);
+    if settled {
+        CACHE
+            .lock()
+            .unwrap()
+            .get_or_insert_with(HashMap::new)
+            .insert(key, hash.clone());
+    }
     Ok(hash)
 }
 

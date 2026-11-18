@@ -13,6 +13,7 @@ license-files = ["LICENSE"]
 dependencies = [
   # NumPy 2 only; each minimum below is the first release built for it.
   "torch>=2.3",
+  "torchvision>=0.18",  # the general pose model is a ResNet-18
   "numpy>=2.0",
   "scipy>=1.13",
   "opencv-python-headless>=4.10",
@@ -26,9 +27,8 @@ animalpose = "animalpose.cli:main"
 behavior = ["scikit-learn>=1.4.2"]  # `animalpose behavior cluster`
 plot = ["matplotlib>=3.9"]  # `animalpose behavior plot`
 export = ["onnx>=1.17", "onnxruntime>=1.19", "onnxscript>=0.1"]
-torchvision = ["torchvision>=0.18"]
 real = ["pandas>=2.2.2", "tables>=3.10"]  # real-dataset converters and DeepLabCut .h5 tracks
-# Base test dependencies. The coverage job also installs torchvision and safetensors.
+# Base test dependencies. The coverage job also installs safetensors.
 dev = [
   "pytest>=7",
   "pytest-cov>=4",

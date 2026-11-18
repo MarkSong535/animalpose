@@ -59,10 +59,11 @@ def decode(heat_logits: torch.Tensor, size: torch.Tensor, offset: torch.Tensor, 
     if for_export:
         # ONNX and Torch can break ties differently. Rank exact ties by flat index in
         # float64, with a perturbation below the spacing of distinct float32 scores.
-        # MPS has no float64, so rank on the CPU there; export runs on the CPU anyway.
+        # MPS has no float64, so rank on the CPU there; export runs on the CPU anyway. Move, then
+        # cast: torch 2.15 casts first in a combined .to(device=, dtype=) and fails on MPS.
         device = torch.device("cpu") if heat.device.type == "mps" else heat.device
         positions = torch.arange(h * w, device=device, dtype=torch.float64)
-        ranking = flat.to(device=device, dtype=torch.float64) * (1 - (positions / (h * w)) * 2**-26)
+        ranking = flat.to(device).to(torch.float64) * (1 - (positions / (h * w)) * 2**-26)
         idx = torch.topk(ranking, max_det, dim=1).indices.to(heat.device)
         scores = flat.gather(1, idx)
     else:
